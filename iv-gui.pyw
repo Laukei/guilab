@@ -118,8 +118,10 @@ class IVProg(QtGui.QMainWindow):
 		settingsMenu.addAction(settingsAction)
 		
 		self.toolbar = self.addToolBar('Operations')
+		self.toolbar.setMovable(False)
 		self.toolbar.addAction(self.acquireAction)
 		self.toolbar.addAction(self.haltAction)
+		self.toolbar.addSeparator()
 		self.toolbar.addAction(plotAction)
 		self.toolbar.addAction(exportAction)
 		
@@ -260,7 +262,7 @@ class IVProg(QtGui.QMainWindow):
 			self.save_as()
 		else:
 			with open(self.filename,'w') as f:
-				f.write('piss')
+				f.write('placeholder')
 
 	def save_as(self):
 		self.filename, _ = QtGui.QFileDialog.getSaveFileName(self,'Save as...','',"I-V data (*.txt);;All data (*.*)")
