@@ -157,15 +157,16 @@ class IVProg(QtGui.QMainWindow):
 		#self.vStep.setInputMask('00.00;_')
 
 		self.dateandtime.setEnabled(False)
+		self.nSteps.setEnabled(False)
 		self.shunt.stateChanged.connect(self.rShunt.setEnabled)
 		self.shunt.setCheckState(QtCore.Qt.Checked)
 
 		self.manualtemp.stateChanged.connect(self.temp.setEnabled)
 		self.temp.setEnabled(False)
 
-		self.vMax.returnPressed.connect(self.recalculateMovement)
-		self.vStep.returnPressed.connect(self.recalculateMovement)
-		self.nSteps.returnPressed.connect(self.recalculateMovement)
+		self.vMax.textChanged.connect(self.recalculateMovement)
+		self.vStep.textChanged.connect(self.recalculateMovement)
+		#self.nSteps.textChanged.connect(self.recalculateMovement)
 		self.lastEdited = [None,None]
 
 		#
@@ -410,30 +411,10 @@ class IVProg(QtGui.QMainWindow):
 		self.settings = self.settingsWindow.settings
 
 	def recalculateMovement(self):
-		self.biasesChanged = False
-		if not (self.sender() == self.lastEdited[0] and None not in self.lastEdited):
-			self.lastEdited = [self.sender(),self.lastEdited[0]]
-		if self.vMax in self.lastEdited and self.vStep in self.lastEdited:
-			try:
-				self.nSteps.setText(str( int(float(self.vMax.text())/float(self.vStep.text())*4 + 1 )))
-				self.biasesChanged = True
-			except ZeroDivisionError:
-				pass
-		if self.vMax in self.lastEdited and self.nSteps in self.lastEdited:
-			try:
-				self.vStep.setText(str( float(self.vMax.text())/((float(self.nSteps.text())-1)/4.0) ))
-				self.biasesChanged = True
-			except ZeroDivisionError:
-				pass
-		if self.vStep in self.lastEdited and self.nSteps in self.lastEdited:
-			try:
-				self.vMax.setText(str( ((float(self.nSteps.text())-1)/4.0)*float(self.vStep.text()) ))
-				self.biasesChanged = True
-			except ZeroDivisionError:
-				pass
-		if self.biasesChanged == True:
-			self.biasPrimitive = np.linspace(0,float(self.vMax.text()),int((float(self.nSteps.text())-1)/4.0)+1)
+		if self.vMax.text().isnumeric() == True and self.vStep.text().isnumeric() == True:
+			self.biasPrimitive = np.array([x*float(self.vStep.text()) for x in range(int(math.ceil(float(self.vMax.text())/float(self.vStep.text())))+1)])
 			self.biases = list(self.biasPrimitive) + list(self.biasPrimitive[::-1])[1:] + list(-self.biasPrimitive)[1:] + list((-self.biasPrimitive)[::-1])[1:-1] + [0]
+			self.nSteps.setText(str(len(self.biases)))
 
 	def resetPbar(self):
 		self.pbar.reset()
