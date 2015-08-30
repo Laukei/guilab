@@ -146,7 +146,6 @@ class IVProg(QtGui.QMainWindow):
 		self.shunt = QtGui.QCheckBox('Shunt?')
 		self.rBias = QtGui.QLineEdit('100000')
 		self.rShunt = QtGui.QLineEdit('50')
-		self.Comment = QtGui.QLineEdit('')
 		self.vMax = QtGui.QLineEdit('')
 		self.vStep = QtGui.QLineEdit('')
 		self.comment = QtGui.QLineEdit('')
@@ -240,7 +239,7 @@ class IVProg(QtGui.QMainWindow):
 		self.setWindowTitle('I-V Tester')
 		self.setWindowIcon(QtGui.QIcon(r'icons\plot.png'))
 		self.biases = []
-		self.filename = False
+		self.filename = None
 		self.statusBar().showMessage('Ready...')
 		self.show()
 
@@ -258,20 +257,50 @@ class IVProg(QtGui.QMainWindow):
 		self.statusBar().showMessage('Selected filename: '+str(self.filename)+' (Currently does nothing!)')
 
 	def save(self):
-		print 'HANDLE PROCESSING OF FILE TO OUTPUT'
-		if self.filename == False:
+		if self.filename == None:
 			self.save_as()
 		else:
 			with open(self.filename,'w') as f:
 				self.csvfile = csv.writer(f)
-				for row in list(np.transpose(np.array(self.data))):
+				for row in self.processMetadata()+['']+list(np.transpose(np.array(self.data))):
 					self.csvfile.writerow(row)
 			self.statusBar().showMessage('Saved to '+str(self.filename))
 
 	def save_as(self):
 		self.filename, _ = QtGui.QFileDialog.getSaveFileName(self,'Save as...','',"I-V data (*.txt);;All data (*.*)")
-		self.save()
+		if self.filename != None:
+			self.save()
 		
+	def processMetadata(self,source=None):
+		self.metacategories = {
+			'batch-name':self.batchName,
+			'device-id':self.deviceId,
+			'sma-number':self.sma,
+			'manually-defined-temp':self.manualtemp,
+			'temperature':self.temp,
+			'shunt':self.shunt,
+			'bias-resistor-value':self.rBias,
+			'shunt-resistor-value':self.rShunt,
+			'max-voltage':self.vMax,
+			'step-size':self.vStep,
+			'number-of-steps':self.nSteps,
+			'comment':self.comment,
+			}
+		if source == None:
+			self.metadata = []
+			for category in sorted(self.metacategories.keys()):
+				if isinstance(self.metacategories[category],QtGui.QLineEdit):
+					self.metadata.append([category,self.metacategories[category].text()])
+				elif isinstance(self.metacategories[category],QtGui.QCheckBox):
+					self.metadata.append([category,self.metacategories[category].isChecked()])
+			return self.metadata
+		elif source != None:
+			for row in source:
+				if isinstance(self.metacategories[row[0]],QtGui.QLineEdit):
+					self.metacategories[row[0]].setText(row[1])
+				elif isinstance(self.metacategories[row[0]],QtGui.QCheckBox):
+					self.metacategories[row[0]].setChecked(row[1])
+
 
 	def new(self):
 		print 'REINITIALISE THE STATE, BARRING VALUES WHICH DON\'T CHANGE'
