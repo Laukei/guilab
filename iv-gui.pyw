@@ -10,6 +10,7 @@ import math
 from PySide import QtGui, QtCore
 import json
 import time
+import csv
 #!!!!!!!!!!!!!!!!!
 from fakesim900 import Sim900
 #!!!!!!!!!!!!!!!!!
@@ -262,12 +263,15 @@ class IVProg(QtGui.QMainWindow):
 			self.save_as()
 		else:
 			with open(self.filename,'w') as f:
-				f.write('placeholder')
+				self.csvfile = csv.writer(f)
+				for row in list(np.transpose(np.array(self.data))):
+					self.csvfile.writerow(row)
+			self.statusBar().showMessage('Saved to '+str(self.filename))
 
 	def save_as(self):
 		self.filename, _ = QtGui.QFileDialog.getSaveFileName(self,'Save as...','',"I-V data (*.txt);;All data (*.*)")
 		self.save()
-		self.statusBar().showMessage('Selected filename: '+str(self.filename)+' (Currently does nothing!)')
+		
 
 	def new(self):
 		print 'REINITIALISE THE STATE, BARRING VALUES WHICH DON\'T CHANGE'

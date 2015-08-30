@@ -25,7 +25,7 @@ class Sim900:
 
 	def query(self,module,command):
 		print 'CONN '+str(module)+', "xyxxz" ; '+str(command)+' ; '+str(self.value)+' ; xyxxz'
-		return float(self.value) + random.gauss(float(self.value),0.4)
+		return float(self.value) + random.gauss(0,0.4)
 
 	def clear(self):
 		pass
