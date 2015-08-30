@@ -79,7 +79,7 @@ class IVProg(QtGui.QMainWindow):
 		saveAsAction = QtGui.QAction(QtGui.QIcon(r'icons\saveas.png'),'&Save As...',self)
 		saveAsAction.setShortcut('Ctrl+Shift+S')
 		saveAsAction.setStatusTip('Save as')
-		saveAsAction.triggered.connect(self.save_as)
+		saveAsAction.triggered.connect(self.saveAs)
 
 		self.acquireAction = QtGui.QAction(QtGui.QIcon(r'icons\acquire.png'),'&Acquire',self)
 		self.acquireAction.setShortcut('Ctrl+R')
@@ -102,8 +102,8 @@ class IVProg(QtGui.QMainWindow):
 		exportAction.setStatusTip('Export data to CSV')
 		exportAction.triggered.connect(self.export)
 
-		settingsAction = QtGui.QAction(QtGui.QIcon(r'icons\settings.png'),'&Settings',self)
-		settingsAction.setStatusTip('Edit global settings')
+		settingsAction = QtGui.QAction(QtGui.QIcon(r'icons\settings.png'),'&Device settings',self)
+		settingsAction.setStatusTip('Edit SIM900 settings')
 		settingsAction.triggered.connect(self.openSettings)
 
 		menubar = self.menuBar()
@@ -138,6 +138,8 @@ class IVProg(QtGui.QMainWindow):
 		#   Create and connect MEASUREMENT VALUE INPUTS
 		#
 
+		self.username = QtGui.QLineEdit('')
+		self.dateandtime = QtGui.QLineEdit('')
 		self.batchName = QtGui.QLineEdit('')
 		self.deviceId = QtGui.QLineEdit('')
 		self.sma = QtGui.QLineEdit('')
@@ -154,6 +156,7 @@ class IVProg(QtGui.QMainWindow):
 		#self.vMax.setInputMask('00.00;_')
 		#self.vStep.setInputMask('00.00;_')
 
+		self.dateandtime.setEnabled(False)
 		self.shunt.stateChanged.connect(self.rShunt.setEnabled)
 		self.shunt.setCheckState(QtCore.Qt.Checked)
 
@@ -175,19 +178,24 @@ class IVProg(QtGui.QMainWindow):
 		subgrid1 = QtGui.QGridLayout()
 		subgrid3 = QtGui.QGridLayout()
 
-		gridsection.addWidget(QtGui.QLabel('Batch:'),0,0)
-		gridsection.addWidget(self.batchName,0,1)
-		gridsection.addWidget(QtGui.QLabel('Device:'),0,2)
-		gridsection.addWidget(self.deviceId,0,3)
+		gridsection.addWidget(QtGui.QLabel('User:'),0,0)
+		gridsection.addWidget(self.username,0,1)
+		gridsection.addWidget(QtGui.QLabel('At:'),0,2)
+		gridsection.addWidget(self.dateandtime,0,3)
 
-		gridsection.addWidget(QtGui.QLabel('SMA:'),1,0)
-		gridsection.addWidget(self.sma,1,1)
+		gridsection.addWidget(QtGui.QLabel('Batch:'),1,0)
+		gridsection.addWidget(self.batchName,1,1)
+		gridsection.addWidget(QtGui.QLabel('Device:'),1,2)
+		gridsection.addWidget(self.deviceId,1,3)
+
+		gridsection.addWidget(QtGui.QLabel('SMA:'),2,0)
+		gridsection.addWidget(self.sma,2,1)
 		subgrid1.addWidget(self.manualtemp,0,0)
 		subgrid1.addWidget(QtGui.QLabel('Temp:'),0,1)
 		subgrid1.addWidget(self.temp,0,2)
-		gridsection.addLayout(subgrid1,1,2,1,2)
+		gridsection.addLayout(subgrid1,2,2,1,2)
 
-		gridsection.addLayout(subgrid3,2,0,1,4)
+		gridsection.addLayout(subgrid3,3,0,1,4)
 		subgrid3.addWidget(QtGui.QLabel('Max voltage:'),0,0)
 		subgrid3.addWidget(self.vMax,0,1)
 		subgrid3.addWidget(QtGui.QLabel('Step size:'),0,2)
@@ -195,17 +203,17 @@ class IVProg(QtGui.QMainWindow):
 		subgrid3.addWidget(QtGui.QLabel('Total steps:'),0,4)
 		subgrid3.addWidget(self.nSteps,0,5)
 
-		gridsection.addWidget(QtGui.QLabel('Rbias:'),3,0)
-		gridsection.addWidget(self.rBias,3,1)
+		gridsection.addWidget(QtGui.QLabel('Rbias:'),4,0)
+		gridsection.addWidget(self.rBias,4,1)
 		subgrid2.addWidget(self.shunt,0,0)
 		subgrid2.addWidget(QtGui.QLabel('Rshunt:'),0,1)
 		subgrid2.addWidget(self.rShunt,0,2)
-		gridsection.addLayout(subgrid2,3,2,1,2)
+		gridsection.addLayout(subgrid2,4,2,1,2)
 
-		gridsection.addWidget(QtGui.QLabel('Comments:'),4,0)
-		gridsection.addWidget(self.comment,4,1,1,3)
+		gridsection.addWidget(QtGui.QLabel('Comments:'),5,0)
+		gridsection.addWidget(self.comment,5,1,1,3)
 
-		gridsection.addWidget(self.pbar,5,0,1,4)
+		gridsection.addWidget(self.pbar,6,0,1,4)
 
 		#
 		#   Create matplotlib items
@@ -239,7 +247,7 @@ class IVProg(QtGui.QMainWindow):
 		self.setWindowTitle('I-V Tester')
 		self.setWindowIcon(QtGui.QIcon(r'icons\plot.png'))
 		self.biases = []
-		self.filename = None
+		self.filename = ''
 		self.statusBar().showMessage('Ready...')
 		self.show()
 
@@ -253,12 +261,32 @@ class IVProg(QtGui.QMainWindow):
 
 	def open(self):
 		self.filename, _ = QtGui.QFileDialog.getOpenFileName(self,'Open file...','',"I-V data (*.txt);;All data (*.*)")
-		print 'HANDLE PROCESSING OF FILE TO INPUT'
-		self.statusBar().showMessage('Selected filename: '+str(self.filename)+' (Currently does nothing!)')
+		if self.filename != '':
+			with open(self.filename,'r') as f:
+				self.csvfile = csv.reader(f)
+				self.inputdata = []
+				for row in self.csvfile:
+					self.inputdata.append(row)
+			if [] in self.inputdata:
+				self.processMetadata(self.inputdata[:self.inputdata.index([])])
+				self.data = []
+				for row in self.inputdata[self.inputdata.index([])+1:]:
+					self.data.append([])
+					for column in row:
+						self.data[-1].append(float(column))
+			else:
+				self.data = []
+				for row in self.inputdata:
+					self.data.append([])
+					for column in row:
+						self.data[-1].append(float(column))
+		self.data = list(np.transpose(np.array(self.data)))
+		self.replot()
+		self.statusBar().showMessage('Loaded '+str(self.filename))
 
 	def save(self):
-		if self.filename == None:
-			self.save_as()
+		if self.filename == '':
+			self.saveAs()
 		else:
 			with open(self.filename,'w') as f:
 				self.csvfile = csv.writer(f)
@@ -266,13 +294,15 @@ class IVProg(QtGui.QMainWindow):
 					self.csvfile.writerow(row)
 			self.statusBar().showMessage('Saved to '+str(self.filename))
 
-	def save_as(self):
+	def saveAs(self):
 		self.filename, _ = QtGui.QFileDialog.getSaveFileName(self,'Save as...','',"I-V data (*.txt);;All data (*.*)")
-		if self.filename != None:
+		if self.filename != '':
 			self.save()
 		
 	def processMetadata(self,source=None):
 		self.metacategories = {
+			'user':self.username,
+			'date-time':self.dateandtime,
 			'batch-name':self.batchName,
 			'device-id':self.deviceId,
 			'sma-number':self.sma,
@@ -299,7 +329,10 @@ class IVProg(QtGui.QMainWindow):
 				if isinstance(self.metacategories[row[0]],QtGui.QLineEdit):
 					self.metacategories[row[0]].setText(row[1])
 				elif isinstance(self.metacategories[row[0]],QtGui.QCheckBox):
-					self.metacategories[row[0]].setChecked(row[1])
+					if row[1] == 'True':
+						self.metacategories[row[0]].setChecked(True)
+					elif row[1] == 'False':
+						self.metacategories[row[0]].setChecked(False)
 
 
 	def new(self):
@@ -322,6 +355,7 @@ class IVProg(QtGui.QMainWindow):
 				self.sim900.close()
 			self.haltAction.setEnabled(True)
 			self.acquireAction.setEnabled(False)
+			self.dateandtime.setText(time.asctime())
 			#self.dataThread.finished.connect()
 			self.step = 0
 			print 'launching in separate thread...',
