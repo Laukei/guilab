@@ -11,6 +11,7 @@ from PySide import QtGui, QtCore
 import json
 import time
 import csv
+import os
 #!!!!!!!!!!!!!!!!!
 from fakesim900 import Sim900
 #!!!!!!!!!!!!!!!!!
@@ -265,7 +266,8 @@ class IVProg(QtGui.QMainWindow):
 		mainthing.setLayout(vbox)
 		self.settings = getSettings()
 		self.setGeometry(300,300,450,500)
-		self.setWindowTitle('I-V Tester')
+		self.name_of_application = 'I-V Tester'
+		self.setWindowTitle(self.name_of_application)
 		self.setWindowIcon(QtGui.QIcon(r'icons\plot.png'))
 		self.biases = []
 		self.filename = ''
@@ -344,6 +346,13 @@ class IVProg(QtGui.QMainWindow):
 			self.needs_saving = False
 			self.replot()
 			self.statusBar().showMessage('Loaded '+str(self.filename))
+			self.updateWindowTitle()
+
+	def updateWindowTitle(self):
+		if self.filename == '':
+			self.setWindowTitle(self.name_of_application)
+		else:
+			self.setWindowTitle(self.name_of_application+' - '+os.path.basename(self.filename))
 
 	def save(self):
 		if self.filename == '':
@@ -354,6 +363,7 @@ class IVProg(QtGui.QMainWindow):
 				for row in self.processMetadata()+['']+list(np.transpose(np.array(self.data))):
 					self.csvfile.writerow(row)
 			self.statusBar().showMessage('Saved to '+str(self.filename))
+			self.updateWindowTitle()
 			self.needs_saving = False
 
 	def saveAs(self):
@@ -400,6 +410,8 @@ class IVProg(QtGui.QMainWindow):
 	def new(self):
 		print 'REINITIALISE THE STATE, BARRING VALUES WHICH DON\'T CHANGE'
 		self.needs_saving = False
+		self.filename = ''
+		self.updateWindowTitle()
 		self.statusBar().showMessage('Currently does nothing!')
 
 	def replot(self):
@@ -459,7 +471,7 @@ class IVProg(QtGui.QMainWindow):
 		#self.halt_acquisition.emit()
 
 	def plotExternal(self):
-		self.plotWindow = IVPlot(self.data)
+		self.plotWindow = IVPlot(self.data,self.processMetadata())
 		self.plotWindow.setWindowModality(QtCore.Qt.WindowModality.ApplicationModal)
 		self.plotWindow.hide()
 		self.plotWindow.show()
@@ -535,38 +547,37 @@ class Sim900Thread(QtCore.QObject):
 
 
 class IVPlot(QtGui.QMainWindow):
-	def __init__(self,data):
+	def __init__(self,data,processed_metadata):
 		super(IVPlot, self).__init__()
-		self.data = data
+		self.supplied_voltages = data[0]
+		self.measured_voltages = data[1]
+		self.metadata = dict(processed_metadata)
 		self.initUI()
 
 	def initUI(self):
 
 		#self.fig =Figure(figsize=(250,250), dpi=72, facecolor=(1,1,1),edgecolor=(0,0,0))
 		#self.ax = self.fig.add_subplot(1,1,1)
+		self.data = [self.supplied_voltages,self.measured_voltages]
 		self.fig = plt.figure(facecolor=(1,1,1),edgecolor=(0,0,0))
 		self.ax = self.fig.add_subplot(1,1,1)
 		self.plot, = plt.plot(*self.data)
-		self.ax.set_ylabel('measured voltage (V)')
 		self.ax.set_xlabel('supplied voltage (V)')
+		self.ax.set_ylabel('measured voltage (V)')
 		#self.ax.set_xlim(-5,5)
 		#self.ax.set_ylim(-5,5)
 		self.canvas = FigureCanvas(self.fig)
 
 		self.yaxis_idevice = QtGui.QCheckBox('Calculate current through device')
 
-
 		self.gridsection = QtGui.QGridLayout()
 		self.gridsection.setSpacing(10)
 		self.gridsection.addWidget(self.yaxis_idevice,0,0)
-
-
-
+		self.yaxis_idevice.stateChanged.connect(self.switchToCurrent)
 
 		self.hbox = QtGui.QHBoxLayout()
 		self.hbox.addWidget(self.canvas)
 		self.hbox.addLayout(self.gridsection)
-
 
 		self.mainthing = QtGui.QWidget()
 		self.setCentralWidget(self.mainthing)
@@ -582,6 +593,29 @@ class IVPlot(QtGui.QMainWindow):
 		self.ax.relim()
 		self.ax.autoscale_view()
 		self.canvas.draw()
+
+	def calculateCurrents(self):
+		if self.metadata['shunt'] == True:
+			self.r_shunt = float(self.metadata['shunt-resistor-value'])
+		else:
+			self.r_shunt = float('inf')
+		self.r_bias = float(self.metadata['bias-resistor-value'])
+		self.calculated_currents = []
+		for v, voltage in enumerate(self.measured_voltages):
+			self.v_meas = float(voltage)
+			self.v_supp = float(self.supplied_voltages[v])
+			self.calculated_currents.append(((self.v_supp-self.v_meas)/self.r_bias) - (self.v_meas/self.r_shunt))
+
+	def switchToCurrent(self):
+		if self.yaxis_idevice.isChecked():
+			self.calculateCurrents()
+			self.data[1] = self.calculated_currents
+			self.ax.set_ylabel('current over device (A)')
+			self.replot()
+		else:
+			self.data[1] = self.measured_voltages
+			self.ax.set_ylabel('measured voltage (V)')
+			self.replot()
 
 
 class IVSettings(QtGui.QMainWindow):
@@ -612,14 +646,14 @@ class IVSettings(QtGui.QMainWindow):
 		self.grid.setRowMinimumHeight(2,10)
 		self.grid.addWidget(QtGui.QLabel('<b>SIM922 temperature module:</b>'),3,0)
 		self.grid.addWidget(self.tsourcemod,3,1)
-		self.grid.addWidget(QtGui.QLabel('\tSensor input channel:'),4,0)
+		self.grid.addWidget(QtGui.QLabel('\tSensor channel:'),4,0)
 		self.grid.addWidget(self.tinput,4,1)
 		self.grid.setRowMinimumHeight(5,10)
 		self.grid.addWidget(QtGui.QLabel('<b>SIM970 voltmeter module:</b>'),6,0)
 		self.grid.addWidget(self.vmeasmod,6,1)
-		self.grid.addWidget(QtGui.QLabel('\tSource input channel:'),7,0)
+		self.grid.addWidget(QtGui.QLabel('\tSupplied voltage channel:'),7,0)
 		self.grid.addWidget(self.vsourceinput,7,1)
-		self.grid.addWidget(QtGui.QLabel('\tMeasured input channel:'),8,0)
+		self.grid.addWidget(QtGui.QLabel('\tMeasured voltage channel:'),8,0)
 		self.grid.addWidget(self.vmeasinput,8,1)
 		self.grid.setRowMinimumHeight(9,10)
 		self.grid.addWidget(self.ok,10,0)
