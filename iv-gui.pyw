@@ -587,9 +587,10 @@ class IVPlot(QtGui.QMainWindow):
 		self.y_max = QtGui.QLineEdit('')
 		self.y_min = QtGui.QLineEdit('')
 		self.gridlines = QtGui.QCheckBox('Axis gridlines')
+		self.give_title = QtGui.QCheckBox('Graph title')
+		self.title = QtGui.QLineEdit(self.autoTitle())
 
 		self.manual_limits_widget = QtGui.QWidget()
-
 		self.manual_limits_widget.manual_grid = QtGui.QGridLayout()
 		self.manual_limits_widget.setLayout(self.manual_limits_widget.manual_grid)
 		self.manual_limits_widget.manual_grid.addWidget(QtGui.QLabel('X<sub>min</sub>'),0,0)
@@ -602,25 +603,40 @@ class IVPlot(QtGui.QMainWindow):
 		self.manual_limits_widget.manual_grid.addWidget(self.y_max,1,3)
 		self.manual_limits_widget.setVisible(False)
 
+
+		self.title_widget = QtGui.QWidget()
+		self.title_widget.title_grid = QtGui.QGridLayout()
+		self.title_widget.setLayout(self.title_widget.title_grid)
+		self.title_widget.title_grid.addWidget(QtGui.QLabel('Title:'),0,0)
+		self.title_widget.title_grid.addWidget(self.title,0,1)
+		self.title_widget.setVisible(False)
+
+
 		self.gridsection1 = QtGui.QGridLayout()
 		self.gridsection2 = QtGui.QGridLayout()
+		self.gridsection3 = QtGui.QGridLayout()
 		self.vbox = QtGui.QVBoxLayout()
 		self.hbox = QtGui.QHBoxLayout()
 
 		self.gridsection1.setSpacing(10)
-		self.gridsection1.addWidget(self.yaxis_idevice,0,0)
-		self.gridsection1.addWidget(self.x_offset,1,0)
-		self.gridsection1.addWidget(self.y_offset,2,0)
-		self.gridsection1.addWidget(self.verbose_graph,3,0)
-		self.gridsection1.addWidget(self.manual_limits,4,0)
+		self.gridsection1.addWidget(self.give_title,0,0)
 
-		self.gridsection2.setSpacing(10)
-		self.gridsection2.addWidget(self.gridlines)
+
+		self.gridsection2.addWidget(self.yaxis_idevice,0,0)
+		self.gridsection2.addWidget(self.x_offset,1,0)
+		self.gridsection2.addWidget(self.y_offset,2,0)
+		self.gridsection2.addWidget(self.verbose_graph,3,0)
+		self.gridsection2.addWidget(self.manual_limits,4,0)
+
+		self.gridsection3.setSpacing(10)
+		self.gridsection3.addWidget(self.gridlines)
 
 
 		self.vbox.addLayout(self.gridsection1)
-		self.vbox.addWidget(self.manual_limits_widget)
+		self.vbox.addWidget(self.title_widget)
 		self.vbox.addLayout(self.gridsection2)
+		self.vbox.addWidget(self.manual_limits_widget)
+		self.vbox.addLayout(self.gridsection3)
 		self.vbox.addStretch(1)
 
 		self.yaxis_idevice.stateChanged.connect(self.switchToCurrent)
@@ -634,6 +650,9 @@ class IVPlot(QtGui.QMainWindow):
 		self.y_max.textChanged.connect(self.replot)
 		self.y_min.textChanged.connect(self.replot)
 		self.gridlines.toggled.connect(self.setGridlines)
+		self.give_title.toggled.connect(self.title_widget.setVisible)
+		self.title.textChanged.connect(self.setGraphTitle)
+		self.give_title.toggled.connect(self.setGraphTitle)
 
 		self.hbox.addWidget(self.canvas)
 		self.hbox.addLayout(self.vbox)
@@ -646,6 +665,40 @@ class IVPlot(QtGui.QMainWindow):
 		self.setWindowIcon(QtGui.QIcon(r'icons\plot.png'))
 		self.switchToCurrent()
 		self.show()
+
+	def autoTitle(self):
+		self.titlestring = 'I-V data'
+		if self.metadata['batch-name'] != '' or self.metadata['device-id']!= '':
+			self.titlestring += ' for '
+			if self.metadata['batch-name'] != '':
+				self.titlestring += self.metadata['batch-name']+' '
+			if self.metadata['batch-name'] != '':
+				self.titlestring += self.metadata['batch-name']+' '
+		if self.metadata['sma-number'] != '':
+			self.titlestring += self.metadata['sma-number']+' '
+		if self.metadata['temperature'] != '':
+			self.titlestring += 'at '+self.metadata['temperature']+'K'
+		if self.metadata['shunt'] == True:
+			self.titlestring += ', '+self.metadata['shunt-resistor-value']+'$\Omega$ shunt'
+		else:
+			self.titlestring += ', no shunt'
+		if self.metadata['bias-resistor-value'] != '':
+			self.titlestring += ', bias resistor '+self.metadata['bias-resistor-value']+'$\Omega$'
+		if self.metadata['date-time'] != '' or self.metadata['user'] != '':
+			self.titlestring += '\n'
+			if self.metadata['user'] != '':
+				self.titlestring += 'Data taken by '+self.metadata['user']
+			if self.metadata['date-time'] != '':
+				self.titlestring += ' on '+self.metadata['date-time']
+		return self.titlestring
+
+	def setGraphTitle(self):
+		if self.give_title.isChecked():
+			self.fig_title = self.fig.suptitle(self.title.text())
+			self.fig_title.set_visible(True)
+		else:
+			self.fig_title.set_visible(False)
+		self.replot()
 
 	def replot(self):
 		self.plot.set_xdata(self.data[0])
@@ -744,9 +797,9 @@ class IVPlot(QtGui.QMainWindow):
 
 	def setGridlines(self):
 		if self.gridlines.isChecked():
-			self.grids = self.ax.grid(b=True, color='grey', linestyle = '-')
+			self.ax.grid(b=True, color='grey', linestyle = '-')
 		else:
-			self.grids.remove()
+			self.ax.grid(b=False)
 		self.replot()
 
 class IVSettings(QtGui.QMainWindow):
