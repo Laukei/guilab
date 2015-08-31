@@ -581,22 +581,62 @@ class IVPlot(QtGui.QMainWindow):
 		self.x_offset = QtGui.QCheckBox('Correct X offset')
 		self.y_offset = QtGui.QCheckBox('Correct Y offset')
 		self.verbose_graph = QtGui.QCheckBox('Verbose graph')
+		self.manual_limits = QtGui.QCheckBox('Manual axes')
+		self.x_max = QtGui.QLineEdit('')
+		self.x_min = QtGui.QLineEdit('')
+		self.y_max = QtGui.QLineEdit('')
+		self.y_min = QtGui.QLineEdit('')
+		self.gridlines = QtGui.QCheckBox('Axis gridlines')
 
-		self.gridsection = QtGui.QGridLayout()
-		self.gridsection.setSpacing(10)
-		self.gridsection.addWidget(self.yaxis_idevice,0,0)
-		self.gridsection.addWidget(self.x_offset,1,0)
-		self.gridsection.addWidget(self.y_offset,2,0)
-		self.gridsection.addWidget(self.verbose_graph,3,0)
+		self.manual_limits_widget = QtGui.QWidget()
+
+		self.manual_limits_widget.manual_grid = QtGui.QGridLayout()
+		self.manual_limits_widget.setLayout(self.manual_limits_widget.manual_grid)
+		self.manual_limits_widget.manual_grid.addWidget(QtGui.QLabel('X<sub>min</sub>'),0,0)
+		self.manual_limits_widget.manual_grid.addWidget(self.x_min,0,1)
+		self.manual_limits_widget.manual_grid.addWidget(QtGui.QLabel('X<sub>max</sub>'),0,2)
+		self.manual_limits_widget.manual_grid.addWidget(self.x_max,0,3)
+		self.manual_limits_widget.manual_grid.addWidget(QtGui.QLabel('Y<sub>min</sub>'),1,0)
+		self.manual_limits_widget.manual_grid.addWidget(self.y_min,1,1)
+		self.manual_limits_widget.manual_grid.addWidget(QtGui.QLabel('Y<sub>max</sub>'),1,2)
+		self.manual_limits_widget.manual_grid.addWidget(self.y_max,1,3)
+		self.manual_limits_widget.setVisible(False)
+
+		self.gridsection1 = QtGui.QGridLayout()
+		self.gridsection2 = QtGui.QGridLayout()
+		self.vbox = QtGui.QVBoxLayout()
+		self.hbox = QtGui.QHBoxLayout()
+
+		self.gridsection1.setSpacing(10)
+		self.gridsection1.addWidget(self.yaxis_idevice,0,0)
+		self.gridsection1.addWidget(self.x_offset,1,0)
+		self.gridsection1.addWidget(self.y_offset,2,0)
+		self.gridsection1.addWidget(self.verbose_graph,3,0)
+		self.gridsection1.addWidget(self.manual_limits,4,0)
+
+		self.gridsection2.setSpacing(10)
+		self.gridsection2.addWidget(self.gridlines)
+
+
+		self.vbox.addLayout(self.gridsection1)
+		self.vbox.addWidget(self.manual_limits_widget)
+		self.vbox.addLayout(self.gridsection2)
+		self.vbox.addStretch(1)
 
 		self.yaxis_idevice.stateChanged.connect(self.switchToCurrent)
 		self.x_offset.stateChanged.connect(self.handleVoltageOffsets)
 		self.y_offset.stateChanged.connect(self.handleVoltageOffsets)
 		self.verbose_graph.stateChanged.connect(self.verboseGraphToggle)
+		self.manual_limits.toggled.connect(self.manual_limits_widget.setVisible)
+		self.manual_limits.toggled.connect(self.replot)
+		self.x_max.textChanged.connect(self.replot)
+		self.x_min.textChanged.connect(self.replot)
+		self.y_max.textChanged.connect(self.replot)
+		self.y_min.textChanged.connect(self.replot)
+		self.gridlines.toggled.connect(self.setGridlines)
 
-		self.hbox = QtGui.QHBoxLayout()
 		self.hbox.addWidget(self.canvas)
-		self.hbox.addLayout(self.gridsection)
+		self.hbox.addLayout(self.vbox)
 
 		self.mainthing = QtGui.QWidget()
 		self.setCentralWidget(self.mainthing)
@@ -604,13 +644,34 @@ class IVPlot(QtGui.QMainWindow):
 		self.setGeometry(300,300,500,400)
 		self.setWindowTitle('I-V Plot')
 		self.setWindowIcon(QtGui.QIcon(r'icons\plot.png'))
+		self.switchToCurrent()
 		self.show()
 
 	def replot(self):
 		self.plot.set_xdata(self.data[0])
 		self.plot.set_ydata(self.data[1])
-		self.ax.relim()
-		self.ax.autoscale_view()
+		if self.manual_limits.isChecked():
+			try:
+				float(self.x_min.text())
+				float(self.x_max.text())
+				self.ax.set_xlim(float(self.x_min.text()),float(self.x_max.text()))
+			except ValueError:
+				pass
+			try:
+				float(self.y_max.text())
+				float(self.y_min.text())
+				self.ax.set_ylim(float(self.y_min.text()),float(self.y_max.text()))
+			except ValueError:
+				pass
+			if self.x_min.text() == self.x_max.text() == '':
+				self.ax.set_xlim(auto = True)
+			if self.y_min.text() == self.y_max.text() == '':
+				self.ax.set_ylim(auto = True)
+		else:
+			self.ax.set_xlim(auto = True)
+			self.ax.set_ylim(auto = True)
+			self.ax.relim()
+			self.ax.autoscale_view()
 		self.canvas.draw()
 
 	def calculateCurrents(self):
@@ -629,20 +690,27 @@ class IVPlot(QtGui.QMainWindow):
 		for v, voltage in enumerate(self.source_dataset):
 			self.v_meas = float(voltage)
 			self.v_supp = float(self.supplied_voltages[v])
-			self.calculated_currents.append(((self.v_supp-self.v_meas)/self.r_bias) - (self.v_meas/self.r_shunt))
+			self.calculated_currents.append((((self.v_supp-self.v_meas)/self.r_bias) - (self.v_meas/self.r_shunt))*1.0e6)
 
 	def switchToCurrent(self):
 		if self.yaxis_idevice.isChecked():
 			self.calculateCurrents()
 			self.data[1] = self.calculated_currents
-			self.ax.set_ylabel('current over device (A)')
+			self.ax.set_ylabel('current over device ($\mu$A)')
 			self.replot()
 		else:
 			if self.y_offset.isChecked():
 				self.data[1] = self.zeroed_measured_voltages
 			else:
 				self.data[1] = self.measured_voltages
-			self.ax.set_ylabel('measured voltage (V)')
+			try:
+				if max(self.data[1]) > 0.01:
+					self.ax.set_ylabel('measured voltage (V)')
+				else:
+					self.ax.set_ylabel('measured voltage (mV)')
+					self.data[1] = 1000 * np.array(self.data[1])
+			except ValueError:
+				self.ax.set_ylabel('measured voltage (V)')
 			self.replot()
 
 	def handleVoltageOffsets(self):			
@@ -674,6 +742,12 @@ class IVPlot(QtGui.QMainWindow):
 			self.text_on_graph.remove()
 			self.replot()
 
+	def setGridlines(self):
+		if self.gridlines.isChecked():
+			self.grids = self.ax.grid(b=True, color='grey', linestyle = '-')
+		else:
+			self.grids.remove()
+		self.replot()
 
 class IVSettings(QtGui.QMainWindow):
 	def __init__(self,settings):
