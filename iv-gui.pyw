@@ -551,6 +551,15 @@ class IVPlot(QtGui.QMainWindow):
 		super(IVPlot, self).__init__()
 		self.supplied_voltages = data[0]
 		self.measured_voltages = data[1]
+		if data[0] != [] and data[1] != []:
+			self.zeroed_supplied_voltages = self.deOffset(data[0],data[0][0])
+			self.zeroed_measured_voltages = self.deOffset(data[1],data[1][0])
+			self.offset_in_supplied_voltage = data[0][0]
+			self.offset_in_measured_voltage = data[1][0]
+		else:
+			self.zeroed_supplied_voltages, self.zeroed_measured_voltages = data[0], data[1]
+			self.offset_in_measured_voltage = 0
+			self.offset_in_supplied_voltage = 0
 		self.metadata = dict(processed_metadata)
 		self.initUI()
 
@@ -568,12 +577,22 @@ class IVPlot(QtGui.QMainWindow):
 		#self.ax.set_ylim(-5,5)
 		self.canvas = FigureCanvas(self.fig)
 
-		self.yaxis_idevice = QtGui.QCheckBox('Calculate current through device')
+		self.yaxis_idevice = QtGui.QCheckBox('Supplied voltage vs device current')
+		self.x_offset = QtGui.QCheckBox('Correct X offset')
+		self.y_offset = QtGui.QCheckBox('Correct Y offset')
+		self.verbose_graph = QtGui.QCheckBox('Verbose graph')
 
 		self.gridsection = QtGui.QGridLayout()
 		self.gridsection.setSpacing(10)
 		self.gridsection.addWidget(self.yaxis_idevice,0,0)
+		self.gridsection.addWidget(self.x_offset,1,0)
+		self.gridsection.addWidget(self.y_offset,2,0)
+		self.gridsection.addWidget(self.verbose_graph,3,0)
+
 		self.yaxis_idevice.stateChanged.connect(self.switchToCurrent)
+		self.x_offset.stateChanged.connect(self.handleVoltageOffsets)
+		self.y_offset.stateChanged.connect(self.handleVoltageOffsets)
+		self.verbose_graph.stateChanged.connect(self.verboseGraphToggle)
 
 		self.hbox = QtGui.QHBoxLayout()
 		self.hbox.addWidget(self.canvas)
@@ -595,13 +614,19 @@ class IVPlot(QtGui.QMainWindow):
 		self.canvas.draw()
 
 	def calculateCurrents(self):
+		if self.y_offset.isChecked():
+			self.source_dataset = self.zeroed_measured_voltages
+		else:
+			self.source_dataset = self.measured_voltages
+
 		if self.metadata['shunt'] == True:
 			self.r_shunt = float(self.metadata['shunt-resistor-value'])
 		else:
 			self.r_shunt = float('inf')
+
 		self.r_bias = float(self.metadata['bias-resistor-value'])
 		self.calculated_currents = []
-		for v, voltage in enumerate(self.measured_voltages):
+		for v, voltage in enumerate(self.source_dataset):
 			self.v_meas = float(voltage)
 			self.v_supp = float(self.supplied_voltages[v])
 			self.calculated_currents.append(((self.v_supp-self.v_meas)/self.r_bias) - (self.v_meas/self.r_shunt))
@@ -613,8 +638,40 @@ class IVPlot(QtGui.QMainWindow):
 			self.ax.set_ylabel('current over device (A)')
 			self.replot()
 		else:
-			self.data[1] = self.measured_voltages
+			if self.y_offset.isChecked():
+				self.data[1] = self.zeroed_measured_voltages
+			else:
+				self.data[1] = self.measured_voltages
 			self.ax.set_ylabel('measured voltage (V)')
+			self.replot()
+
+	def handleVoltageOffsets(self):			
+		if self.x_offset.isChecked():
+			self.data[0] = self.zeroed_supplied_voltages
+		else:
+			self.data[0] = self.supplied_voltages
+
+		if self.y_offset.isChecked() and not self.yaxis_idevice.isChecked():
+			self.data[1] = self.zeroed_measured_voltages
+		elif not self.y_offset.isChecked() and not self.yaxis_idevice.isChecked():
+			self.data[1] = self.measured_voltages
+		else:
+			self.switchToCurrent()		
+		self.replot()
+
+	def deOffset(self,dataset,offset):
+		return list(np.array(dataset)-offset)
+
+	def verboseGraphToggle(self):
+		if self.verbose_graph.isChecked():
+			self.textstr = ''
+			for key in sorted(self.metadata.keys()):
+				self.textstr += str(key)+': '+str(self.metadata[key])+'\n'
+			self.text_on_graph = self.ax.text(0.05, 0.95, self.textstr[:-1], transform = self.ax.transAxes, fontsize = 12,
+				verticalalignment = 'top')
+			self.replot()
+		else:
+			self.text_on_graph.remove()
 			self.replot()
 
 
