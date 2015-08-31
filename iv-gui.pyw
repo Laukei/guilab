@@ -25,7 +25,6 @@ def getSettings():
 			settings = json.loads(f.read())
 	except IOError:
 		settings = defaultSettings()
-	print 'Warning: NO CHECKING IS PERFORMED ON SETTINGS! this could be unwise'
 	return settings
 
 def defaultSettings():
@@ -153,6 +152,27 @@ class IVProg(QtGui.QMainWindow):
 		self.comment = QtGui.QLineEdit('')
 		self.nSteps = QtGui.QLineEdit('')
 
+		self.list_of_changeables = [self.username,
+									self.dateandtime,
+									self.batchName,
+									self.deviceId,
+									self.sma,
+									self.manualtemp,
+									self.temp,
+									self.shunt,
+									self.rBias,
+									self.rShunt,
+									self.vMax,
+									self.vStep,
+									self.comment,
+									self.nSteps]
+
+		for item in self.list_of_changeables:
+			if isinstance(item,QtGui.QLineEdit):
+				item.textChanged.connect(self.setNeedsSaving)
+			elif isinstance(item,QtGui.QCheckBox):
+				item.stateChanged.connect(self.setNeedsSaving)
+
 		#self.vMax.setInputMask('00.00;_')
 		#self.vStep.setInputMask('00.00;_')
 
@@ -227,8 +247,8 @@ class IVProg(QtGui.QMainWindow):
 		self.fig = plt.figure(facecolor=(1,1,1),edgecolor=(0,0,0))
 		self.ax = self.fig.add_subplot(1,1,1)
 		self.plot, = plt.plot(*self.data)
-		self.ax.set_xlabel('measured voltage (V)')
-		self.ax.set_ylabel('supplied voltage (V)')
+		self.ax.set_ylabel('measured voltage (V)')
+		self.ax.set_xlabel('supplied voltage (V)')
 		#self.ax.set_xlim(-5,5)
 		#self.ax.set_ylim(-5,5)
 		self.canvas = FigureCanvas(self.fig)
@@ -236,7 +256,7 @@ class IVProg(QtGui.QMainWindow):
 		vbox = QtGui.QVBoxLayout()
 		vbox.addLayout(gridsection)
 		vbox.addWidget(self.canvas)
-		vbox.addStretch(1)
+		#vbox.addStretch(1)
 
 		#
 		#   Final pre-flight checks
@@ -250,6 +270,7 @@ class IVProg(QtGui.QMainWindow):
 		self.biases = []
 		self.filename = ''
 		self.statusBar().showMessage('Ready...')
+		self.needs_saving = False
 		self.show()
 
 	#
@@ -258,32 +279,71 @@ class IVProg(QtGui.QMainWindow):
 
 	def closeEvent(self,event):
 		setSettings(self.settings)
-		event.accept()
+		self.checkNeedsSaving(event)
+
+	def checkNeedsSaving(self, event=None):
+		if self.needs_saving:
+			if self.filename == '':
+				self.question = 'Do you want to save data?'
+			else:
+				self.question = 'Do you want to save changes to '+str(self.filename)+'?'
+			reply = QtGui.QMessageBox.question(self,'I-V Tester',
+				self.question,QtGui.QMessageBox.Save | QtGui.QMessageBox.Discard | QtGui.QMessageBox.Cancel, QtGui.QMessageBox.Save)
+			if reply == QtGui.QMessageBox.Discard:
+				if event != None:
+					event.accept()
+				else:
+					return False
+			elif reply == QtGui.QMessageBox.Cancel:
+				if event != None:
+					event.ignore()
+				else:
+					return True
+			elif reply == QtGui.QMessageBox.Save:
+				self.save()
+				if event != None:
+					event.accept()
+				else:
+					return False
+		else:
+			if event != None:
+				event.accept()
+			else:
+				return False
+
+	def setNeedsSaving(self):
+		self.needs_saving = True
 
 	def open(self):
-		self.filename, _ = QtGui.QFileDialog.getOpenFileName(self,'Open file...','',"I-V data (*.txt);;All data (*.*)")
-		if self.filename != '':
-			with open(self.filename,'r') as f:
-				self.csvfile = csv.reader(f)
-				self.inputdata = []
-				for row in self.csvfile:
-					self.inputdata.append(row)
-			if [] in self.inputdata:
-				self.processMetadata(self.inputdata[:self.inputdata.index([])])
-				self.data = []
-				for row in self.inputdata[self.inputdata.index([])+1:]:
-					self.data.append([])
-					for column in row:
-						self.data[-1].append(float(column))
-			else:
-				self.data = []
-				for row in self.inputdata:
-					self.data.append([])
-					for column in row:
-						self.data[-1].append(float(column))
-		self.data = list(np.transpose(np.array(self.data)))
-		self.replot()
-		self.statusBar().showMessage('Loaded '+str(self.filename))
+		self.filename_open, _ = QtGui.QFileDialog.getOpenFileName(self,'Open file...','',"I-V data (*.txt);;All data (*.*)")
+		if self.checkNeedsSaving() == False:
+			self.new()
+			self.filename = self.filename_open
+			if self.filename != '':
+				with open(self.filename,'r') as f:
+					self.csvfile = csv.reader(f)
+					self.inputdata = []
+					for row in self.csvfile:
+						self.inputdata.append(row)
+				if [] in self.inputdata:
+					self.processMetadata(self.inputdata[:self.inputdata.index([])])
+					self.data = []
+					for row in self.inputdata[self.inputdata.index([])+1:]:
+						self.data.append([])
+						for column in row:
+							self.data[-1].append(float(column))
+				else:
+					self.data = []
+					for row in self.inputdata:
+						self.data.append([])
+						for column in row:
+							self.data[-1].append(float(column))
+			self.data = list(np.transpose(np.array(self.data)))
+			if self.data == []:
+				self.data = [[],[]]
+			self.needs_saving = False
+			self.replot()
+			self.statusBar().showMessage('Loaded '+str(self.filename))
 
 	def save(self):
 		if self.filename == '':
@@ -294,6 +354,7 @@ class IVProg(QtGui.QMainWindow):
 				for row in self.processMetadata()+['']+list(np.transpose(np.array(self.data))):
 					self.csvfile.writerow(row)
 			self.statusBar().showMessage('Saved to '+str(self.filename))
+			self.needs_saving = False
 
 	def saveAs(self):
 		self.filename, _ = QtGui.QFileDialog.getSaveFileName(self,'Save as...','',"I-V data (*.txt);;All data (*.*)")
@@ -338,6 +399,7 @@ class IVProg(QtGui.QMainWindow):
 
 	def new(self):
 		print 'REINITIALISE THE STATE, BARRING VALUES WHICH DON\'T CHANGE'
+		self.needs_saving = False
 		self.statusBar().showMessage('Currently does nothing!')
 
 	def replot(self):
@@ -349,30 +411,32 @@ class IVProg(QtGui.QMainWindow):
 
 	def acquire(self):
 		if len(self.biases) > 0:
-			print 'RUN TEST FOR SIM900 BEFORE PROCEEDING, POST FAILURE TO STATUSBAR!!!'
-			if not self.manualtemp.isChecked():
-				self.sim900 = Sim900(self.settings['sim900addr'])
-				self.temp.setText(str(self.sim900.query(self.settings['tsourcemod'],'TVAL? '+str(self.settings['tinput'])+',1')))
-				self.sim900.close()
-			self.haltAction.setEnabled(True)
-			self.acquireAction.setEnabled(False)
-			self.dateandtime.setText(time.asctime())
-			#self.dataThread.finished.connect()
-			self.step = 0
-			print 'launching in separate thread...',
-			self.objThread = QtCore.QThread()
-			self.simThread = Sim900Thread(self.settings,self.biases)
-			self.simThread.moveToThread(self.objThread)
-			self.objThread.started.connect(self.simThread.longRunning)
-			self.simThread.newdata.connect(self.awaitData)
-			self.simThread.finished.connect(self.objThread.quit)
-			self.simThread.finished.connect(self.acquisitionFinished)
-			self.simThread.aborted.connect(self.resetPbar)
-			#self.halt_acquisition.connect(self.simThread.breakout)
-			self.objThread.start()
-			print 'launched'
-
-			self.replot()
+			self.sim900 = Sim900(self.settings['sim900addr'])
+			if self.sim900.check() != False:
+				if not self.manualtemp.isChecked():
+					self.sim900 = Sim900(self.settings['sim900addr'])
+					self.temp.setText(str(self.sim900.query(self.settings['tsourcemod'],'TVAL? '+str(self.settings['tinput'])+',1')))
+					self.sim900.close()
+				self.haltAction.setEnabled(True)
+				self.acquireAction.setEnabled(False)
+				self.dateandtime.setText(time.asctime())
+				#self.dataThread.finished.connect()
+				self.step = 0
+				print 'launching in separate thread...',
+				self.objThread = QtCore.QThread()
+				self.simThread = Sim900Thread(self.settings,self.biases)
+				self.simThread.moveToThread(self.objThread)
+				self.objThread.started.connect(self.simThread.longRunning)
+				self.simThread.newdata.connect(self.awaitData)
+				self.simThread.finished.connect(self.objThread.quit)
+				self.simThread.finished.connect(self.acquisitionFinished)
+				self.simThread.aborted.connect(self.resetPbar)
+				#self.halt_acquisition.connect(self.simThread.breakout)
+				self.objThread.start()
+				print 'launched'
+				self.replot()
+			else:
+				self.statusBar().showMessage('SIM900 not responding on '+str(self.settings['sim900addr']))
 
 		else:
 			self.statusBar().showMessage('No valid bias range set!')
@@ -395,6 +459,10 @@ class IVProg(QtGui.QMainWindow):
 		#self.halt_acquisition.emit()
 
 	def plotExternal(self):
+		self.plotWindow = IVPlot(self.data)
+		self.plotWindow.setWindowModality(QtCore.Qt.WindowModality.ApplicationModal)
+		self.plotWindow.hide()
+		self.plotWindow.show()
 		self.statusBar().showMessage('Currently does nothing!')
 
 	def export(self):
@@ -411,10 +479,17 @@ class IVProg(QtGui.QMainWindow):
 		self.settings = self.settingsWindow.settings
 
 	def recalculateMovement(self):
-		if self.vMax.text().isnumeric() == True and self.vStep.text().isnumeric() == True:
-			self.biasPrimitive = np.array([x*float(self.vStep.text()) for x in range(int(math.ceil(float(self.vMax.text())/float(self.vStep.text())))+1)])
-			self.biases = list(self.biasPrimitive) + list(self.biasPrimitive[::-1])[1:] + list(-self.biasPrimitive)[1:] + list((-self.biasPrimitive)[::-1])[1:-1] + [0]
-			self.nSteps.setText(str(len(self.biases)))
+		try:
+			if float(self.vStep.text())>0.0:
+				self.biasPrimitive = np.array([x*float(self.vStep.text()) for x in range(int(math.ceil(float(self.vMax.text())/float(self.vStep.text())))+1)])
+				self.biases = list(self.biasPrimitive) + list(self.biasPrimitive[::-1])[1:] + list(-self.biasPrimitive)[1:] + list((-self.biasPrimitive)[::-1])[1:-1] + [0]
+				self.nSteps.setText(str(len(self.biases)))
+			elif float(self.vStep.text())==0.0:
+				self.biases = []
+				self.nSteps.setText(str(float('inf')))
+		except ValueError:
+			pass
+
 
 	def resetPbar(self):
 		self.pbar.reset()
@@ -441,17 +516,72 @@ class Sim900Thread(QtCore.QObject):
 		if self.abort == True:
 			self.aborted.emit()
 		#print self.data
+		self.closeSim()
 		self.finished.emit()
 
 	def initSim(self):
 		self.sim = Sim900(self.settings['sim900addr'])
 		self.sim.write(self.settings['vsourcemod'],'OPON')
 
+	def closeSim(self):
+		self.sim.write(self.settings['vsourcemod'],'OPOF')
+		self.sim.close()
+
 	def setAndGetSimVoltages(self,biaspoint):
 		self.sim.write(self.settings['vsourcemod'],'VOLT '+str('%.3f' % biaspoint))
-		time.sleep(0.5)
+		time.sleep(0.8)
 		self.data[0].append(float(self.sim.query(self.settings['vmeasmod'],'VOLT? '+str(self.settings['vsourceinput'])+',1')))
 		self.data[1].append(float(self.sim.query(self.settings['vmeasmod'],'VOLT? '+str(self.settings['vmeasinput'])+',1')))
+
+
+class IVPlot(QtGui.QMainWindow):
+	def __init__(self,data):
+		super(IVPlot, self).__init__()
+		self.data = data
+		self.initUI()
+
+	def initUI(self):
+
+		#self.fig =Figure(figsize=(250,250), dpi=72, facecolor=(1,1,1),edgecolor=(0,0,0))
+		#self.ax = self.fig.add_subplot(1,1,1)
+		self.fig = plt.figure(facecolor=(1,1,1),edgecolor=(0,0,0))
+		self.ax = self.fig.add_subplot(1,1,1)
+		self.plot, = plt.plot(*self.data)
+		self.ax.set_ylabel('measured voltage (V)')
+		self.ax.set_xlabel('supplied voltage (V)')
+		#self.ax.set_xlim(-5,5)
+		#self.ax.set_ylim(-5,5)
+		self.canvas = FigureCanvas(self.fig)
+
+		self.yaxis_idevice = QtGui.QCheckBox('Calculate current through device')
+
+
+		self.gridsection = QtGui.QGridLayout()
+		self.gridsection.setSpacing(10)
+		self.gridsection.addWidget(self.yaxis_idevice,0,0)
+
+
+
+
+		self.hbox = QtGui.QHBoxLayout()
+		self.hbox.addWidget(self.canvas)
+		self.hbox.addLayout(self.gridsection)
+
+
+		self.mainthing = QtGui.QWidget()
+		self.setCentralWidget(self.mainthing)
+		self.mainthing.setLayout(self.hbox)
+		self.setGeometry(300,300,500,400)
+		self.setWindowTitle('I-V Plot')
+		self.setWindowIcon(QtGui.QIcon(r'icons\plot.png'))
+		self.show()
+
+	def replot(self):
+		self.plot.set_xdata(self.data[0])
+		self.plot.set_ydata(self.data[1])
+		self.ax.relim()
+		self.ax.autoscale_view()
+		self.canvas.draw()
 
 
 class IVSettings(QtGui.QMainWindow):
@@ -488,9 +618,9 @@ class IVSettings(QtGui.QMainWindow):
 		self.grid.addWidget(QtGui.QLabel('<b>SIM970 voltmeter module:</b>'),6,0)
 		self.grid.addWidget(self.vmeasmod,6,1)
 		self.grid.addWidget(QtGui.QLabel('\tSource input channel:'),7,0)
-		self.grid.addWidget(self.vmeasinput,7,1)
+		self.grid.addWidget(self.vsourceinput,7,1)
 		self.grid.addWidget(QtGui.QLabel('\tMeasured input channel:'),8,0)
-		self.grid.addWidget(self.vsourceinput,8,1)
+		self.grid.addWidget(self.vmeasinput,8,1)
 		self.grid.setRowMinimumHeight(9,10)
 		self.grid.addWidget(self.ok,10,0)
 		self.grid.addWidget(self.cancel,10,1)

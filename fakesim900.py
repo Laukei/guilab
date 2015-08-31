@@ -11,6 +11,14 @@ class Sim900:
 		supply address (Sim900('ASRL1')) to connect to
 		'''
 		self.value = 5
+		if address == 'ASRL1':
+			self.device = True
+		else:
+			self.device = False
+
+	def check(self):
+		return self.device
+
 
 	def write(self,module,command):
 		print 'CONN '+str(module)+', "xyxxz" ; '+str(command)+' ; xyxxz'

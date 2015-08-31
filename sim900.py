@@ -11,8 +11,14 @@ class Sim900:
 		supply address (Sim900('ASRL1')) to connect to
 		'''
 		self.rm = visa.ResourceManager()
-		self.device = self.rm.open_resource(address)
-		self.device.timeout = timeout
+		try:
+			self.device = self.rm.open_resource(address)
+			self.device.timeout = timeout
+		except visa.VisaIOError:
+			self.device = False
+
+	def check(self):
+		return self.device
 
 	def write(self,module,command):
 		try:
