@@ -115,7 +115,7 @@ class IVProg(QtGui.QMainWindow):
 		plotAction.triggered.connect(self.plotExternal)
 
 		exportAction = QtGui.QAction(QtGui.QIcon(r'icons\export.png'),'&Export',self)
-		exportAction.setShortcut('Ctrl+E')
+		exportAction.setShortcut('Ctrl+C')
 		exportAction.setStatusTip('Export data to CSV')
 		exportAction.triggered.connect(self.export)
 
@@ -429,7 +429,6 @@ class IVProg(QtGui.QMainWindow):
 					elif row[1] == 'False':
 						self.metacategories[row[0]].setChecked(False)
 
-
 	def new(self):
 		print 'REINITIALISE THE STATE, BARRING VALUES WHICH DON\'T CHANGE'
 		self.needs_saving = False
@@ -498,10 +497,17 @@ class IVProg(QtGui.QMainWindow):
 		self.plotWindow.setWindowModality(QtCore.Qt.WindowModality.ApplicationModal)
 		self.plotWindow.hide()
 		self.plotWindow.show()
-		self.statusBar().showMessage('Currently does nothing!')
 
 	def export(self):
-		self.statusBar().showMessage('Currently does nothing!')
+		self.clipboard = QtGui.QApplication.clipboard()
+		self.clipboard_string = ''
+		for row in list(np.array(self.data).transpose()):#
+			for col in row:
+				self.clipboard_string += str(col) +'\t'
+			self.clipboard_string = self.clipboard_string[:-1] +'\n'
+		self.clipboard.setText(self.clipboard_string[:-1])
+		print self.clipboard_string
+		self.statusBar().showMessage('Raw data copied to clipboard')
 
 	def openSettings(self):
 		self.settingsWindow = IVSettings(self.settings)
@@ -801,20 +807,30 @@ class IVPlot(QtGui.QMainWindow):
 
 	def exportGraph(self):
 		self.filetype_string = ''
+		self.graphical_extensions = []
 		for key in sorted(self.canvas.get_supported_filetypes_grouped().keys()):
 			self.filetype_string += key + ' ('
 			for value in self.canvas.get_supported_filetypes_grouped()[key]:
 				self.filetype_string += '*.'+value+' '
+				self.graphical_extensions.append(value)
 			self.filetype_string = self.filetype_string[:-1]+');;'
-		self.filetype_string = self.filetype_string[:-2]
+		#self.filetype_string = self.filetype_string[:-2]
+		self.filetype_string += self.filetype_string + 'Raw text (*.txt)'
 
 		if self.filename == '':
 			self.target_path = ''
 		else:
 			self.target_path = os.path.dirname(self.filename)
 		self.filename, _ = QtGui.QFileDialog.getSaveFileName(self,'Save as...',self.target_path,self.filetype_string,'Portable Network Graphics (*.png)')
-		plt.savefig(self.filename,dpi=float(self.dpi.text()))
-		#plt.savefig()
+		if self.filename != '':
+			if os.path.splitext(self.filename)[1][1:] in self.graphical_extensions:
+				plt.savefig(self.filename,dpi=float(self.dpi.text()))
+			else:
+				with open(self.filename,'w') as f:
+					self.csvfile = csv.writer(f,delimiter = ',')
+					self.csvfile.writerows(list(np.array(self.data).transpose()))
+			self.statusBar().showMessage('Graph data saved to: '+str(self.filename))
+			#plt.savefig()
 
 	def autoTitle(self):
 		self.titlestring = 'I-V data'
@@ -822,10 +838,10 @@ class IVPlot(QtGui.QMainWindow):
 			self.titlestring += ' for '
 			if self.metadata['batch-name'] != '':
 				self.titlestring += self.metadata['batch-name']+' '
-			if self.metadata['batch-name'] != '':
-				self.titlestring += self.metadata['batch-name']+' '
+			if self.metadata['device-id'] != '':
+				self.titlestring += self.metadata['device-id']+' '
 		if self.metadata['sma-number'] != '':
-			self.titlestring += self.metadata['sma-number']+' '
+			self.titlestring += 'SMA'+self.metadata['sma-number']+' '
 		if self.metadata['temperature'] != '':
 			self.titlestring += 'at '+self.metadata['temperature']+'K'
 		if self.metadata['shunt'] == True:
