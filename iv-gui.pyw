@@ -35,7 +35,24 @@ def defaultSettings():
 				'vmeasmod':7,
 				'vsourceinput':1,
 				'vmeasinput':2,
-				'tinput':3}
+				'tinput':3,
+				'export':{
+					'title':True,
+					'x_offset':True,
+					'y_offset':True,
+					'verbose':False,
+					'manual_axes':False,
+					'xmax':None,
+					'xmin':None,
+					'ymax':None,
+					'ymin':None,
+					'grids':True,
+					'width':8,
+					'height':6,
+					'unit':'in',
+					'dpi':150,
+					'idvsv':True
+				}}
 	return settings
 
 def setSettings(settings):
@@ -106,6 +123,10 @@ class IVProg(QtGui.QMainWindow):
 		settingsAction.setStatusTip('Edit SIM900 settings')
 		settingsAction.triggered.connect(self.openSettings)
 
+		plotSettingsAction = QtGui.QAction(QtGui.QIcon(r'icons\plotsettings.png'),'&Plot settings',self)
+		plotSettingsAction.setStatusTip('Edit settings for plotter')
+		plotSettingsAction.triggered.connect(self.openPlotSettings)
+
 		menubar = self.menuBar()
 		fileMenu = menubar.addMenu('&File')
 		fileMenu.addAction(newAction)
@@ -117,6 +138,7 @@ class IVProg(QtGui.QMainWindow):
 		fileMenu.addAction(exitAction)
 		settingsMenu = menubar.addMenu('&Settings')
 		settingsMenu.addAction(settingsAction)
+		settingsMenu.addAction(plotSettingsAction)
 		
 		self.toolbar = self.addToolBar('Operations')
 		self.toolbar.setMovable(False)
@@ -471,7 +493,7 @@ class IVProg(QtGui.QMainWindow):
 		#self.halt_acquisition.emit()
 
 	def plotExternal(self):
-		self.plotWindow = IVPlot(self.data,self.processMetadata())
+		self.plotWindow = IVPlot(self.data,self.processMetadata(),self.settings)
 		self.plotWindow.setWindowModality(QtCore.Qt.WindowModality.ApplicationModal)
 		self.plotWindow.hide()
 		self.plotWindow.show()
@@ -487,8 +509,18 @@ class IVProg(QtGui.QMainWindow):
 		self.settingsWindow.show()
 		self.settingsWindow.ok.clicked.connect(self.receiveSettings)
 
+	def openPlotSettings(self):
+		self.plotSettingsWindow = IVPlotSettings(self.settings)
+		self.plotSettingsWindow.setWindowModality(QtCore.Qt.WindowModality.ApplicationModal)
+		self.plotSettingsWindow.hide()
+		self.plotSettingsWindow.show()
+		self.plotSettingsWindow.ok.clicked.connect(self.receivePlotSettings)
+
 	def receiveSettings(self):
 		self.settings = self.settingsWindow.settings
+
+	def receivePlotSettings(self):
+		self.settings = self.plotSettingsWindow.settings
 
 	def recalculateMovement(self):
 		try:
@@ -547,7 +579,7 @@ class Sim900Thread(QtCore.QObject):
 
 
 class IVPlot(QtGui.QMainWindow):
-	def __init__(self,data,processed_metadata):
+	def __init__(self,data,processed_metadata,settings):
 		super(IVPlot, self).__init__()
 		self.supplied_voltages = data[0]
 		self.measured_voltages = data[1]
@@ -561,6 +593,8 @@ class IVPlot(QtGui.QMainWindow):
 			self.offset_in_measured_voltage = 0
 			self.offset_in_supplied_voltage = 0
 		self.metadata = dict(processed_metadata)
+		self.settings = settings
+		self.se = self.settings['export']
 		self.initUI()
 
 	def initUI(self):
@@ -568,7 +602,7 @@ class IVPlot(QtGui.QMainWindow):
 		#self.fig =Figure(figsize=(250,250), dpi=72, facecolor=(1,1,1),edgecolor=(0,0,0))
 		#self.ax = self.fig.add_subplot(1,1,1)
 		self.data = [self.supplied_voltages,self.measured_voltages]
-		self.fig = plt.figure(facecolor=(1,1,1),edgecolor=(0,0,0))
+		self.fig = plt.figure(figsize=(8,6), dpi=300, facecolor=(1,1,1),edgecolor=(0,0,0))
 		self.ax = self.fig.add_subplot(1,1,1)
 		self.plot, = plt.plot(*self.data)
 		self.ax.set_xlabel('supplied voltage (V)')
@@ -589,6 +623,33 @@ class IVPlot(QtGui.QMainWindow):
 		self.gridlines = QtGui.QCheckBox('Axis gridlines')
 		self.give_title = QtGui.QCheckBox('Graph title')
 		self.title = QtGui.QLineEdit(self.autoTitle())
+		self.dpi = QtGui.QLineEdit('')
+		self.exp_width = QtGui.QLineEdit('')
+		self.exp_height = QtGui.QLineEdit('')
+		self.exp_units = QtGui.QComboBox(self)
+		self.possible_units = ['in','cm','px']
+		for unit in self.possible_units:
+			self.exp_units.addItem(unit)
+
+		self.exp_units.setCurrentIndex(self.possible_units.index(self.se['unit']))
+
+		self.checkables = [ ['title',self.give_title],
+							['x_offset',self.x_offset],
+							['y_offset',self.y_offset],
+							['verbose',self.verbose_graph],
+							['manual_axes',self.manual_limits],
+							['grids',self.gridlines],
+							['idvsv',self.yaxis_idevice]]
+
+		self.textables = [  ['ymax',self.y_max],
+							['ymin',self.y_min],
+							['xmax',self.x_max],
+							['xmin',self.x_min],
+							['width',self.exp_width],
+							['height',self.exp_height],
+							['dpi',self.dpi]]
+
+		self.initFromSettings()
 
 		self.manual_limits_widget = QtGui.QWidget()
 		self.manual_limits_widget.manual_grid = QtGui.QGridLayout()
@@ -603,7 +664,6 @@ class IVPlot(QtGui.QMainWindow):
 		self.manual_limits_widget.manual_grid.addWidget(self.y_max,1,3)
 		self.manual_limits_widget.setVisible(False)
 
-
 		self.title_widget = QtGui.QWidget()
 		self.title_widget.title_grid = QtGui.QGridLayout()
 		self.title_widget.setLayout(self.title_widget.title_grid)
@@ -611,11 +671,30 @@ class IVPlot(QtGui.QMainWindow):
 		self.title_widget.title_grid.addWidget(self.title,0,1)
 		self.title_widget.setVisible(False)
 
+		self.export_widget = QtGui.QWidget()
+		self.export_widget.export_grid = QtGui.QGridLayout()
+		self.export_widget.vbox = QtGui.QVBoxLayout()
+		self.export_widget.vbox.addWidget(QtGui.QLabel('Export settings'))
+		self.export_widget.vbox.addLayout(self.export_widget.export_grid)
+		self.export_widget.setLayout(self.export_widget.vbox)
+		self.export_widget.export_grid.addWidget(QtGui.QLabel('Width:'),0,0)
+		self.export_widget.export_grid.addWidget(self.exp_width,0,1)
+		self.export_widget.export_grid.addWidget(QtGui.QLabel('Height:'),0,2)
+		self.export_widget.export_grid.addWidget(self.exp_height,0,3)
+		self.export_widget.export_grid.addWidget(QtGui.QLabel('DPI:'),1,0)
+		self.export_widget.export_grid.addWidget(self.dpi,1,1)
+		self.export_widget.export_grid.addWidget(QtGui.QLabel('Units:'),1,2)
+		self.export_widget.export_grid.addWidget(self.exp_units,1,3)
+
+		self.panel_widget = QtGui.QWidget()
+		self.panel_widget.vbox = QtGui.QVBoxLayout()
+		self.panel_widget.setLayout(self.panel_widget.vbox)
+		self.panel_widget.setFixedWidth(200)
 
 		self.gridsection1 = QtGui.QGridLayout()
 		self.gridsection2 = QtGui.QGridLayout()
 		self.gridsection3 = QtGui.QGridLayout()
-		self.vbox = QtGui.QVBoxLayout()
+		#self.vbox = QtGui.QVBoxLayout()
 		self.hbox = QtGui.QHBoxLayout()
 
 		self.gridsection1.setSpacing(10)
@@ -631,13 +710,13 @@ class IVPlot(QtGui.QMainWindow):
 		self.gridsection3.setSpacing(10)
 		self.gridsection3.addWidget(self.gridlines)
 
-
-		self.vbox.addLayout(self.gridsection1)
-		self.vbox.addWidget(self.title_widget)
-		self.vbox.addLayout(self.gridsection2)
-		self.vbox.addWidget(self.manual_limits_widget)
-		self.vbox.addLayout(self.gridsection3)
-		self.vbox.addStretch(1)
+		self.panel_widget.vbox.addLayout(self.gridsection1)
+		self.panel_widget.vbox.addWidget(self.title_widget)
+		self.panel_widget.vbox.addLayout(self.gridsection2)
+		self.panel_widget.vbox.addWidget(self.manual_limits_widget)
+		self.panel_widget.vbox.addLayout(self.gridsection3)
+		self.panel_widget.vbox.addWidget(self.export_widget)
+		self.panel_widget.vbox.addStretch(1)
 
 		self.yaxis_idevice.stateChanged.connect(self.switchToCurrent)
 		self.x_offset.stateChanged.connect(self.handleVoltageOffsets)
@@ -653,9 +732,19 @@ class IVPlot(QtGui.QMainWindow):
 		self.give_title.toggled.connect(self.title_widget.setVisible)
 		self.title.textChanged.connect(self.setGraphTitle)
 		self.give_title.toggled.connect(self.setGraphTitle)
+		self.exp_units.activated.connect(self.setExp)
+		self.exp_width.textChanged.connect(self.setExp)
+		self.exp_height.textChanged.connect(self.setExp)
+		self.dpi.textChanged.connect(self.setExp)
 
-		self.hbox.addWidget(self.canvas)
-		self.hbox.addLayout(self.vbox)
+
+		self.scroll_area = QtGui.QScrollArea()
+		self.scroll_area.setBackgroundRole(QtGui.QPalette.Dark)
+		self.scroll_area.setAlignment(QtCore.Qt.AlignCenter)
+		self.scroll_area.setWidget(self.canvas)
+
+		self.hbox.addWidget(self.scroll_area)
+		self.hbox.addWidget(self.panel_widget)
 
 		self.mainthing = QtGui.QWidget()
 		self.setCentralWidget(self.mainthing)
@@ -663,8 +752,32 @@ class IVPlot(QtGui.QMainWindow):
 		self.setGeometry(300,300,500,400)
 		self.setWindowTitle('I-V Plot')
 		self.setWindowIcon(QtGui.QIcon(r'icons\plot.png'))
-		self.switchToCurrent()
+		self.updateGraph()
 		self.show()
+
+	def updateGraph(self):
+		self.manual_limits_widget.setVisible(self.manual_limits.isChecked())
+		self.title_widget.setVisible(self.give_title.isChecked())
+		self.switchToCurrent()
+		self.handleVoltageOffsets()
+		self.setGraphTitle()
+		self.setExp()
+		self.verboseGraphToggle()
+		self.setGridlines()
+
+	def initFromSettings(self):
+		for checkable in self.checkables:
+			if self.se[checkable[0]] == True:
+				checkable[1].setCheckState(QtCore.Qt.Checked)
+			else:
+				checkable[1].setCheckState(QtCore.Qt.Unchecked)
+
+		for textable in self.textables:
+			if self.se[textable[0]] == None:
+				textable[1].setText('')
+			else:
+				textable[1].setText(str(self.se[textable[0]]))
+		self.exp_units.setCurrentIndex(self.possible_units.index(self.se['unit']))
 
 	def autoTitle(self):
 		self.titlestring = 'I-V data'
@@ -698,6 +811,12 @@ class IVPlot(QtGui.QMainWindow):
 			self.fig_title.set_visible(True)
 		else:
 			self.fig_title.set_visible(False)
+		self.replot()
+
+	def setExp(self):
+		self.fig.set_dpi(float(self.dpi.text()))
+		self.fig.set_size_inches(float(self.exp_width.text()),float(self.exp_height.text()), forward=True)
+		self.canvas.resize(float(self.dpi.text())*float(self.exp_width.text()),float(self.dpi.text())*float(self.exp_height.text()))
 		self.replot()
 
 	def replot(self):
@@ -792,7 +911,10 @@ class IVPlot(QtGui.QMainWindow):
 				verticalalignment = 'top')
 			self.replot()
 		else:
-			self.text_on_graph.remove()
+			try:
+				self.text_on_graph.remove()
+			except AttributeError:
+				pass
 			self.replot()
 
 	def setGridlines(self):
@@ -864,6 +986,152 @@ class IVSettings(QtGui.QMainWindow):
 		self.settings['tinput'] = int(self.tinput.text())
 		self.close()
 
+class IVPlotSettings(QtGui.QMainWindow):
+	def __init__(self,settings):
+		super(IVPlotSettings, self).__init__()
+		self.settings = settings
+		self.se = self.settings['export']
+		self.initUI()
+
+	def initUI(self):
+		self.yaxis_idevice = QtGui.QCheckBox('Supplied voltage vs device current')
+		self.x_offset = QtGui.QCheckBox('Correct X offset')
+		self.y_offset = QtGui.QCheckBox('Correct Y offset')
+		self.verbose_graph = QtGui.QCheckBox('Verbose graph')
+		self.manual_limits = QtGui.QCheckBox('Manual axes')
+		self.x_max = QtGui.QLineEdit('')
+		self.x_min = QtGui.QLineEdit('')
+		self.y_max = QtGui.QLineEdit('')
+		self.y_min = QtGui.QLineEdit('')
+		self.gridlines = QtGui.QCheckBox('Axis gridlines')
+		self.give_title = QtGui.QCheckBox('Graph title')
+		self.dpi = QtGui.QLineEdit('')
+		self.exp_width = QtGui.QLineEdit('')
+		self.exp_height = QtGui.QLineEdit('')
+		self.exp_units = QtGui.QComboBox(self)
+		self.possible_units = ['in','cm','px']
+		for unit in self.possible_units:
+			self.exp_units.addItem(unit)
+
+		self.checkables = [ ['title',self.give_title],
+							['x_offset',self.x_offset],
+							['y_offset',self.y_offset],
+							['verbose',self.verbose_graph],
+							['manual_axes',self.manual_limits],
+							['grids',self.gridlines],
+							['idvsv',self.yaxis_idevice]]
+
+		self.textables = [  ['ymax',self.y_max],
+							['ymin',self.y_min],
+							['xmax',self.x_max],
+							['xmin',self.x_min],
+							['width',self.exp_width],
+							['height',self.exp_height],
+							['dpi',self.dpi]]
+
+		self.ok = QtGui.QPushButton('OK')
+		self.cancel = QtGui.QPushButton('Cancel')
+		self.cancel.clicked.connect(self.close)
+		self.ok.clicked.connect(self.passValuesBackAndClose)
+
+		self.initFromSettings()
+
+		self.grid = QtGui.QGridLayout()
+		self.grid.setSpacing(10)
+
+		self.manual_limits_widget = QtGui.QWidget()
+		self.manual_limits_widget.manual_grid = QtGui.QGridLayout()
+		self.manual_limits_widget.setLayout(self.manual_limits_widget.manual_grid)
+		self.manual_limits_widget.manual_grid.addWidget(QtGui.QLabel('X<sub>min</sub>'),0,0)
+		self.manual_limits_widget.manual_grid.addWidget(self.x_min,0,1)
+		self.manual_limits_widget.manual_grid.addWidget(QtGui.QLabel('X<sub>max</sub>'),0,2)
+		self.manual_limits_widget.manual_grid.addWidget(self.x_max,0,3)
+		self.manual_limits_widget.manual_grid.addWidget(QtGui.QLabel('Y<sub>min</sub>'),1,0)
+		self.manual_limits_widget.manual_grid.addWidget(self.y_min,1,1)
+		self.manual_limits_widget.manual_grid.addWidget(QtGui.QLabel('Y<sub>max</sub>'),1,2)
+		self.manual_limits_widget.manual_grid.addWidget(self.y_max,1,3)
+		self.manual_limits_widget.setVisible(self.manual_limits.isChecked())
+
+		self.export_widget = QtGui.QWidget()
+		self.export_widget.export_grid = QtGui.QGridLayout()
+		self.export_widget.vbox = QtGui.QVBoxLayout()
+		self.export_widget.vbox.addWidget(QtGui.QLabel('Export settings'))
+		self.export_widget.vbox.addLayout(self.export_widget.export_grid)
+		self.export_widget.setLayout(self.export_widget.vbox)
+		self.export_widget.export_grid.addWidget(QtGui.QLabel('Width:'),0,0)
+		self.export_widget.export_grid.addWidget(self.exp_width,0,1)
+		self.export_widget.export_grid.addWidget(QtGui.QLabel('Height:'),0,2)
+		self.export_widget.export_grid.addWidget(self.exp_height,0,3)
+		self.export_widget.export_grid.addWidget(QtGui.QLabel('DPI:'),1,0)
+		self.export_widget.export_grid.addWidget(self.dpi,1,1)
+		self.export_widget.export_grid.addWidget(QtGui.QLabel('Units:'),1,2)
+		self.export_widget.export_grid.addWidget(self.exp_units,1,3)
+
+		self.vbox = QtGui.QVBoxLayout()
+		self.setLayout(self.vbox)
+
+		self.gridsection1 = QtGui.QGridLayout()
+		self.gridsection2 = QtGui.QGridLayout()
+		self.gridsection3 = QtGui.QGridLayout()
+		self.hbox = QtGui.QHBoxLayout()
+
+		self.gridsection2.setSpacing(10)
+		self.gridsection2.addWidget(self.give_title,0,0)
+		self.gridsection2.addWidget(self.yaxis_idevice,1,0)
+		self.gridsection2.addWidget(self.x_offset,2,0)
+		self.gridsection2.addWidget(self.y_offset,3,0)
+		self.gridsection2.addWidget(self.verbose_graph,4,0)
+		self.gridsection2.addWidget(self.manual_limits,5,0)
+
+		self.gridsection3.setSpacing(10)
+		self.gridsection3.addWidget(self.gridlines)
+
+		self.vbox.addLayout(self.gridsection2)
+		self.vbox.addWidget(self.manual_limits_widget)
+		self.vbox.addLayout(self.gridsection3)
+		self.vbox.addWidget(self.export_widget)
+		self.vbox.addLayout(self.grid)
+		self.vbox.addStretch(1)
+
+		self.manual_limits.toggled.connect(self.manual_limits_widget.setVisible)
+
+		self.grid.addWidget(self.ok,10,0)
+		self.grid.addWidget(self.cancel,10,1)
+
+		self.mainthing = QtGui.QWidget()
+		self.setCentralWidget(self.mainthing)
+		self.mainthing.setLayout(self.vbox)
+		self.setGeometry(300,300,300,200)
+		self.setWindowTitle('I-V Settings')
+		self.setWindowIcon(QtGui.QIcon(r'icons\settings.png'))
+		self.show()
+
+	def initFromSettings(self):
+		for checkable in self.checkables:
+			if self.se[checkable[0]] == True:
+				checkable[1].setCheckState(QtCore.Qt.Checked)
+			else:
+				checkable[1].setCheckState(QtCore.Qt.Unchecked)
+
+		for textable in self.textables:
+			if self.se[textable[0]] == None:
+				textable[1].setText('')
+			else:
+				textable[1].setText(str(self.se[textable[0]]))
+
+		self.exp_units.setCurrentIndex(self.possible_units.index(self.se['unit']))
+
+	def passValuesBackAndClose(self):
+		for checkable in self.checkables:
+			self.se[checkable[0]] = checkable[1].isChecked()
+
+		for textable in self.textables:
+			if textable[1].text() == '':
+				self.se[textable[0]] = None
+			else:
+				self.se[textable[0]] = float(textable[1].text())
+		self.se['unit'] = self.exp_units.currentText() 
+		self.close()
 
 def main():
 	app = QtGui.QApplication(sys.argv)
