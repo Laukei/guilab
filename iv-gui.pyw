@@ -151,7 +151,7 @@ class IVProg(QtGui.QMainWindow):
 		mainthing = QtGui.QWidget()
 		self.setCentralWidget(mainthing)
 		self.pbar = QtGui.QProgressBar(self)
-		self.pbar.setGeometry(30,40,200,25)
+		#self.pbar.setGeometry(30,40,200,25)
 		#self.timer = QtCore.QTimer()
 		#self.timer.timeout.connect(self.timerEvent)
 		
@@ -267,7 +267,7 @@ class IVProg(QtGui.QMainWindow):
 
 		#self.fig =Figure(figsize=(250,250), dpi=72, facecolor=(1,1,1),edgecolor=(0,0,0))
 		#self.ax = self.fig.add_subplot(1,1,1)
-		self.fig = plt.figure(facecolor=(1,1,1),edgecolor=(0,0,0))
+		self.fig = plt.figure(figsize=(8,6), dpi=72, facecolor=(1,1,1),edgecolor=(0,0,0))
 		self.ax = self.fig.add_subplot(1,1,1)
 		self.plot, = plt.plot(*self.data)
 		self.ax.set_ylabel('measured voltage (V)')
@@ -287,7 +287,8 @@ class IVProg(QtGui.QMainWindow):
 
 		mainthing.setLayout(vbox)
 		self.settings = getSettings()
-		self.setGeometry(300,300,450,500)
+		#self.setGeometry(300,300,450,500)
+		self.resize(450,500)
 		self.name_of_application = 'I-V Tester'
 		self.setWindowTitle(self.name_of_application)
 		self.setWindowIcon(QtGui.QIcon(r'icons\plot.png'))
@@ -493,7 +494,7 @@ class IVProg(QtGui.QMainWindow):
 		#self.halt_acquisition.emit()
 
 	def plotExternal(self):
-		self.plotWindow = IVPlot(self.data,self.processMetadata(),self.settings)
+		self.plotWindow = IVPlot(self.data,self.processMetadata(),self.settings,self.filename)
 		self.plotWindow.setWindowModality(QtCore.Qt.WindowModality.ApplicationModal)
 		self.plotWindow.hide()
 		self.plotWindow.show()
@@ -579,7 +580,7 @@ class Sim900Thread(QtCore.QObject):
 
 
 class IVPlot(QtGui.QMainWindow):
-	def __init__(self,data,processed_metadata,settings):
+	def __init__(self,data,processed_metadata,settings,filename):
 		super(IVPlot, self).__init__()
 		self.supplied_voltages = data[0]
 		self.measured_voltages = data[1]
@@ -595,6 +596,7 @@ class IVPlot(QtGui.QMainWindow):
 		self.metadata = dict(processed_metadata)
 		self.settings = settings
 		self.se = self.settings['export']
+		self.filename = filename
 		self.initUI()
 
 	def initUI(self):
@@ -605,8 +607,8 @@ class IVPlot(QtGui.QMainWindow):
 		self.fig = plt.figure(figsize=(8,6), dpi=300, facecolor=(1,1,1),edgecolor=(0,0,0))
 		self.ax = self.fig.add_subplot(1,1,1)
 		self.plot, = plt.plot(*self.data)
-		self.ax.set_xlabel('supplied voltage (V)')
-		self.ax.set_ylabel('measured voltage (V)')
+		self.ax.set_xlabel('Supplied voltage (V)')
+		self.ax.set_ylabel('Measured voltage (V)')
 		#self.ax.set_xlim(-5,5)
 		#self.ax.set_ylim(-5,5)
 		self.canvas = FigureCanvas(self.fig)
@@ -650,6 +652,10 @@ class IVPlot(QtGui.QMainWindow):
 							['dpi',self.dpi]]
 
 		self.initFromSettings()
+
+		self.resetButton = QtGui.QPushButton('Reset')
+		self.closeButton = QtGui.QPushButton('Close')
+		self.exportButton = QtGui.QPushButton('Export')
 
 		self.manual_limits_widget = QtGui.QWidget()
 		self.manual_limits_widget.manual_grid = QtGui.QGridLayout()
@@ -700,6 +706,10 @@ class IVPlot(QtGui.QMainWindow):
 		self.gridsection1.setSpacing(10)
 		self.gridsection1.addWidget(self.give_title,0,0)
 
+		self.bottombar = QtGui.QHBoxLayout()
+		self.bottombar.addWidget(self.exportButton)
+		self.bottombar.addWidget(self.resetButton)
+		self.bottombar.addWidget(self.closeButton)
 
 		self.gridsection2.addWidget(self.yaxis_idevice,0,0)
 		self.gridsection2.addWidget(self.x_offset,1,0)
@@ -717,6 +727,7 @@ class IVPlot(QtGui.QMainWindow):
 		self.panel_widget.vbox.addLayout(self.gridsection3)
 		self.panel_widget.vbox.addWidget(self.export_widget)
 		self.panel_widget.vbox.addStretch(1)
+		self.panel_widget.vbox.addLayout(self.bottombar)
 
 		self.yaxis_idevice.stateChanged.connect(self.switchToCurrent)
 		self.x_offset.stateChanged.connect(self.handleVoltageOffsets)
@@ -736,6 +747,9 @@ class IVPlot(QtGui.QMainWindow):
 		self.exp_width.textChanged.connect(self.setExp)
 		self.exp_height.textChanged.connect(self.setExp)
 		self.dpi.textChanged.connect(self.setExp)
+		self.closeButton.clicked.connect(self.close)
+		self.resetButton.clicked.connect(self.resetPlot)
+		self.exportButton.clicked.connect(self.exportGraph)
 
 
 		self.scroll_area = QtGui.QScrollArea()
@@ -749,10 +763,12 @@ class IVPlot(QtGui.QMainWindow):
 		self.mainthing = QtGui.QWidget()
 		self.setCentralWidget(self.mainthing)
 		self.mainthing.setLayout(self.hbox)
-		self.setGeometry(300,300,500,400)
+		#self.setGeometry(300,300,500,400)
+		self.resize(800,600)
 		self.setWindowTitle('I-V Plot')
 		self.setWindowIcon(QtGui.QIcon(r'icons\plot.png'))
 		self.updateGraph()
+		self.showMaximized()
 		self.show()
 
 	def updateGraph(self):
@@ -778,6 +794,27 @@ class IVPlot(QtGui.QMainWindow):
 			else:
 				textable[1].setText(str(self.se[textable[0]]))
 		self.exp_units.setCurrentIndex(self.possible_units.index(self.se['unit']))
+
+	def resetPlot(self):
+		self.initFromSettings()
+		self.updateGraph()
+
+	def exportGraph(self):
+		self.filetype_string = ''
+		for key in sorted(self.canvas.get_supported_filetypes_grouped().keys()):
+			self.filetype_string += key + ' ('
+			for value in self.canvas.get_supported_filetypes_grouped()[key]:
+				self.filetype_string += '*.'+value+' '
+			self.filetype_string = self.filetype_string[:-1]+');;'
+		self.filetype_string = self.filetype_string[:-2]
+
+		if self.filename == '':
+			self.target_path = ''
+		else:
+			self.target_path = os.path.dirname(self.filename)
+		self.filename, _ = QtGui.QFileDialog.getSaveFileName(self,'Save as...',self.target_path,self.filetype_string,'Portable Network Graphics (*.png)')
+		plt.savefig(self.filename,dpi=float(self.dpi.text()))
+		#plt.savefig()
 
 	def autoTitle(self):
 		self.titlestring = 'I-V data'
@@ -868,7 +905,7 @@ class IVPlot(QtGui.QMainWindow):
 		if self.yaxis_idevice.isChecked():
 			self.calculateCurrents()
 			self.data[1] = self.calculated_currents
-			self.ax.set_ylabel('current over device ($\mu$A)')
+			self.ax.set_ylabel('Current over device ($\mu$A)')
 			self.replot()
 		else:
 			if self.y_offset.isChecked():
@@ -877,12 +914,12 @@ class IVPlot(QtGui.QMainWindow):
 				self.data[1] = self.measured_voltages
 			try:
 				if max(self.data[1]) > 0.01:
-					self.ax.set_ylabel('measured voltage (V)')
+					self.ax.set_ylabel('Measured voltage (V)')
 				else:
-					self.ax.set_ylabel('measured voltage (mV)')
+					self.ax.set_ylabel('Measured voltage (mV)')
 					self.data[1] = 1000 * np.array(self.data[1])
 			except ValueError:
-				self.ax.set_ylabel('measured voltage (V)')
+				self.ax.set_ylabel('Measured voltage (V)')
 			self.replot()
 
 	def handleVoltageOffsets(self):			
@@ -971,7 +1008,8 @@ class IVSettings(QtGui.QMainWindow):
 		self.mainthing = QtGui.QWidget()
 		self.setCentralWidget(self.mainthing)
 		self.mainthing.setLayout(self.vbox)
-		self.setGeometry(300,300,300,200)
+		#self.setGeometry(300,300,300,200)
+		self.resize(300,200)
 		self.setWindowTitle('I-V Settings')
 		self.setWindowIcon(QtGui.QIcon(r'icons\settings.png'))
 		self.show()
@@ -1101,7 +1139,8 @@ class IVPlotSettings(QtGui.QMainWindow):
 		self.mainthing = QtGui.QWidget()
 		self.setCentralWidget(self.mainthing)
 		self.mainthing.setLayout(self.vbox)
-		self.setGeometry(300,300,300,200)
+		#self.setGeometry(300,300,300,200)
+		self.resize(300,200)
 		self.setWindowTitle('I-V Settings')
 		self.setWindowIcon(QtGui.QIcon(r'icons\settings.png'))
 		self.show()
