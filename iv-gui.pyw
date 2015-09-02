@@ -83,6 +83,11 @@ class IVProg(QtGui.QMainWindow):
 		newAction.setStatusTip('Blank dataset')
 		newAction.triggered.connect(self.new)
 
+		newSequentialAction = QtGui.QAction(QtGui.QIcon(r'icons\newsequential.png'),'&New (sequential)...',self)
+		newSequentialAction.setShortcut('Ctrl+Shift+N')
+		newSequentialAction.setStatusTip('Blank sequential dataset')
+		newSequentialAction.triggered.connect(self.newSequential)
+
 		openAction = QtGui.QAction(QtGui.QIcon(r'icons\open.png'),'&Open...',self)
 		openAction.setShortcut('Ctrl+O')
 		openAction.setStatusTip('Open data for viewing')
@@ -130,6 +135,7 @@ class IVProg(QtGui.QMainWindow):
 		menubar = self.menuBar()
 		fileMenu = menubar.addMenu('&File')
 		fileMenu.addAction(newAction)
+		fileMenu.addAction(newSequentialAction)
 		fileMenu.addAction(openAction)
 		fileMenu.addSeparator()
 		fileMenu.addAction(saveAction)
@@ -290,12 +296,12 @@ class IVProg(QtGui.QMainWindow):
 		#self.setGeometry(300,300,450,500)
 		self.resize(450,500)
 		self.name_of_application = 'I-V Tester'
-		self.setWindowTitle(self.name_of_application)
+		self.setWindowTitle(self.name_of_application + '[*]')
 		self.setWindowIcon(QtGui.QIcon(r'icons\plot.png'))
 		self.biases = []
 		self.filename = ''
 		self.statusBar().showMessage('Ready...')
-		self.needs_saving = False
+		self.setNoNeedSaving()
 		self.show()
 
 	#
@@ -338,6 +344,11 @@ class IVProg(QtGui.QMainWindow):
 
 	def setNeedsSaving(self):
 		self.needs_saving = True
+		self.setWindowModified(True)
+
+	def setNoNeedSaving(self):
+		self.needs_saving = False
+		self.setWindowModified(False)
 
 	def open(self):
 		self.filename_open, _ = QtGui.QFileDialog.getOpenFileName(self,'Open file...','',"I-V data (*.txt);;All data (*.*)")
@@ -366,16 +377,16 @@ class IVProg(QtGui.QMainWindow):
 			self.data = list(np.transpose(np.array(self.data)))
 			if self.data == []:
 				self.data = [[],[]]
-			self.needs_saving = False
+			self.setNoNeedSaving()
 			self.replot()
 			self.statusBar().showMessage('Loaded '+str(self.filename))
 			self.updateWindowTitle()
 
 	def updateWindowTitle(self):
 		if self.filename == '':
-			self.setWindowTitle(self.name_of_application)
+			self.setWindowTitle(self.name_of_application + '[*]')
 		else:
-			self.setWindowTitle(self.name_of_application+' - '+os.path.basename(self.filename))
+			self.setWindowTitle(self.name_of_application+' - '+os.path.basename(self.filename) + '[*]')
 
 	def save(self):
 		if self.filename == '':
@@ -387,7 +398,7 @@ class IVProg(QtGui.QMainWindow):
 					self.csvfile.writerow(row)
 			self.statusBar().showMessage('Saved to '+str(self.filename))
 			self.updateWindowTitle()
-			self.needs_saving = False
+			self.setNoNeedSaving()
 
 	def saveAs(self):
 		self.filename, _ = QtGui.QFileDialog.getSaveFileName(self,'Save as...','',"I-V data (*.txt);;All data (*.*)")
@@ -430,11 +441,20 @@ class IVProg(QtGui.QMainWindow):
 						self.metacategories[row[0]].setChecked(False)
 
 	def new(self):
-		print 'REINITIALISE THE STATE, BARRING VALUES WHICH DON\'T CHANGE'
-		self.needs_saving = False
-		self.filename = ''
-		self.updateWindowTitle()
-		self.statusBar().showMessage('Currently does nothing!')
+		if self.checkNeedsSaving() == False:
+			self.setNoNeedSaving()
+			self.filename = ''
+			self.updateWindowTitle()
+			self.statusBar().showMessage('NO YOU FOOL! REINITIALISE VALUES!')
+
+	def newSequential(self):
+		if self.checkNeedsSaving()== False:
+			self.setNoNeedSaving()
+			self.filename = ''
+			self.updateWindowTitle()
+			self.data = [[],[]]
+			self.replot()
+			self.statusBar().showMessage('New dataset (preserving metadata)')
 
 	def replot(self):
 		self.plot.set_xdata(self.data[0])
@@ -506,7 +526,6 @@ class IVProg(QtGui.QMainWindow):
 				self.clipboard_string += str(col) +'\t'
 			self.clipboard_string = self.clipboard_string[:-1] +'\n'
 		self.clipboard.setText(self.clipboard_string[:-1])
-		print self.clipboard_string
 		self.statusBar().showMessage('Raw data copied to clipboard')
 
 	def openSettings(self):
@@ -815,7 +834,7 @@ class IVPlot(QtGui.QMainWindow):
 				self.graphical_extensions.append(value)
 			self.filetype_string = self.filetype_string[:-1]+');;'
 		#self.filetype_string = self.filetype_string[:-2]
-		self.filetype_string += self.filetype_string + 'Raw text (*.txt)'
+		self.filetype_string = self.filetype_string + 'Raw text (*.txt)'
 
 		if self.filename == '':
 			self.target_path = ''
