@@ -216,6 +216,7 @@ class IVProg(QtGui.QMainWindow):
 		self.vMax.textChanged.connect(self.recalculateMovement)
 		self.vStep.textChanged.connect(self.recalculateMovement)
 		#self.nSteps.textChanged.connect(self.recalculateMovement)
+
 		self.lastEdited = [None,None]
 
 		#
@@ -273,9 +274,10 @@ class IVProg(QtGui.QMainWindow):
 
 		#self.fig =Figure(figsize=(250,250), dpi=72, facecolor=(1,1,1),edgecolor=(0,0,0))
 		#self.ax = self.fig.add_subplot(1,1,1)
-		self.fig = plt.figure(figsize=(8,6), dpi=72, facecolor=(1,1,1),edgecolor=(0,0,0))
+		self.fig = plt.figure(figsize=(6,3.8), dpi=72, facecolor=(1,1,1),edgecolor=(0,0,0))
 		self.ax = self.fig.add_subplot(1,1,1)
 		self.plot, = plt.plot(*self.data)
+		#self.fig.subplots_adjust(bottom = 0.2)
 		self.ax.set_ylabel('measured voltage (V)')
 		self.ax.set_xlabel('supplied voltage (V)')
 		#self.ax.set_xlim(-5,5)
@@ -307,6 +309,10 @@ class IVProg(QtGui.QMainWindow):
 	#
 	#   Function definitions
 	#
+
+	def resizeEvent(self,event):
+		self.replot()
+		event.accept()
 
 	def closeEvent(self,event):
 		setSettings(self.settings)
@@ -461,6 +467,7 @@ class IVProg(QtGui.QMainWindow):
 		self.plot.set_ydata(self.data[1])
 		self.ax.relim()
 		self.ax.autoscale_view()
+		plt.tight_layout()
 		self.canvas.draw()
 
 	def acquire(self):
@@ -916,6 +923,16 @@ class IVPlot(QtGui.QMainWindow):
 			self.ax.set_ylim(auto = True)
 			self.ax.relim()
 			self.ax.autoscale_view()
+		plt.tight_layout()
+		if self.give_title.isChecked():
+			try:
+				self.base_of_text = self.fig_title.get_window_extent().get_points()[0][1]
+				self.height_of_plot = float(self.dpi.text())*float(self.exp_height.text())
+				self.fig.subplots_adjust(top=((self.base_of_text/self.height_of_plot)-0.015))
+			except AttributeError:
+				pass
+			except RuntimeError:
+				pass
 		self.canvas.draw()
 
 	def calculateCurrents(self):
@@ -979,7 +996,7 @@ class IVPlot(QtGui.QMainWindow):
 			self.textstr = ''
 			for key in sorted(self.metadata.keys()):
 				self.textstr += str(key)+': '+str(self.metadata[key])+'\n'
-			self.text_on_graph = self.ax.text(0.05, 0.95, self.textstr[:-1], transform = self.ax.transAxes, fontsize = 12,
+			self.text_on_graph = self.ax.text(0.01, 0.99, self.textstr[:-1], transform = self.ax.transAxes, fontsize = 12,
 				verticalalignment = 'top')
 			self.replot()
 		else:
@@ -991,6 +1008,7 @@ class IVPlot(QtGui.QMainWindow):
 
 	def setGridlines(self):
 		if self.gridlines.isChecked():
+			self.ax.set_axisbelow(True)
 			self.ax.grid(b=True, color='grey', linestyle = '-')
 		else:
 			self.ax.grid(b=False)
