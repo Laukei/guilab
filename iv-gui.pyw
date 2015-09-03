@@ -136,6 +136,7 @@ class IVProg(QtGui.QMainWindow):
 		fileMenu = menubar.addMenu('&File')
 		fileMenu.addAction(newAction)
 		fileMenu.addAction(newSequentialAction)
+		fileMenu.addSeparator()
 		fileMenu.addAction(openAction)
 		fileMenu.addSeparator()
 		fileMenu.addAction(saveAction)
@@ -196,11 +197,14 @@ class IVProg(QtGui.QMainWindow):
 									self.comment,
 									self.nSteps]
 
+		self.list_of_default_values = []
 		for item in self.list_of_changeables:
 			if isinstance(item,QtGui.QLineEdit):
 				item.textChanged.connect(self.setNeedsSaving)
+				self.list_of_default_values.append(item.text())
 			elif isinstance(item,QtGui.QCheckBox):
 				item.stateChanged.connect(self.setNeedsSaving)
+				self.list_of_default_values.append(item.isChecked())
 
 		#self.vMax.setInputMask('00.00;_')
 		#self.vStep.setInputMask('00.00;_')
@@ -305,7 +309,7 @@ class IVProg(QtGui.QMainWindow):
 		self.statusBar().showMessage('Ready...')
 		self.setNoNeedSaving()
 		self.show()
-
+		self.replot()
 	#
 	#   Function definitions
 	#
@@ -448,18 +452,26 @@ class IVProg(QtGui.QMainWindow):
 
 	def new(self):
 		if self.checkNeedsSaving() == False:
-			self.setNoNeedSaving()
 			self.filename = ''
+			self.data = [[],[]]
+			for i, item in enumerate(self.list_of_changeables):
+				if isinstance(item,QtGui.QLineEdit):
+					item.setText(self.list_of_default_values[i])
+				elif isinstance(item,QtGui.QCheckBox):
+					item.setChecked(self.list_of_default_values[i])
+			self.replot()
+			self.setNoNeedSaving()
 			self.updateWindowTitle()
 			self.statusBar().showMessage('NO YOU FOOL! REINITIALISE VALUES!')
 
 	def newSequential(self):
 		if self.checkNeedsSaving()== False:
-			self.setNoNeedSaving()
 			self.filename = ''
-			self.updateWindowTitle()
 			self.data = [[],[]]
+			self.dateandtime.setText(self.list_of_default_values[self.list_of_changeables.index(self.dateandtime)])
 			self.replot()
+			self.setNoNeedSaving()
+			self.updateWindowTitle()
 			self.statusBar().showMessage('New dataset (preserving metadata)')
 
 	def replot(self):
@@ -471,7 +483,7 @@ class IVProg(QtGui.QMainWindow):
 		self.canvas.draw()
 
 	def acquire(self):
-		if len(self.biases) > 0:
+		if len(self.biases) > 0 and (self.data == [[],[]] or self.checkNeedsSaving()== False):
 			self.sim900 = Sim900(self.settings['sim900addr'])
 			if self.sim900.check() != False:
 				if not self.manualtemp.isChecked():
