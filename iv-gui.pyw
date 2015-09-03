@@ -7,7 +7,7 @@ matplotlib.use('Qt4Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import math
-from PySide import QtGui, QtCore
+from PySide import QtGui, QtCore, QtWebKit
 import json
 import time
 import csv
@@ -103,25 +103,25 @@ class IVProg(QtGui.QMainWindow):
 		saveAsAction.setStatusTip('Save as')
 		saveAsAction.triggered.connect(self.saveAs)
 
-		self.acquireAction = QtGui.QAction(QtGui.QIcon(r'icons\acquire.png'),'&Acquire',self)
+		self.acquireAction = QtGui.QAction(QtGui.QIcon(r'icons\acquire.png'),'&Run',self)
 		self.acquireAction.setShortcut('Ctrl+R')
-		self.acquireAction.setStatusTip('Run I-V scan')
+		self.acquireAction.setStatusTip('Run I-V scan (Ctrl+R)')
 		self.acquireAction.triggered.connect(self.acquire)
 
 		self.haltAction = QtGui.QAction(QtGui.QIcon(r'icons\abort.png'),'&Halt acquisition',self)
 		self.haltAction.setShortcut('Ctrl+H')
-		self.haltAction.setStatusTip('Halt I-V acquisition')
+		self.haltAction.setStatusTip('Halt I-V acquisition (Ctrl+H)')
 		self.haltAction.triggered.connect(self.halt)
 		self.haltAction.setEnabled(False)
 
 		plotAction = QtGui.QAction(QtGui.QIcon(r'icons\plot.png'),'&Plot',self)
 		plotAction.setShortcut('Ctrl+P')
-		plotAction.setStatusTip('Plot I-V data graphically')
+		plotAction.setStatusTip('Plot I-V data graphically (Ctrl+P)')
 		plotAction.triggered.connect(self.plotExternal)
 
 		exportAction = QtGui.QAction(QtGui.QIcon(r'icons\export.png'),'&Export',self)
 		exportAction.setShortcut('Ctrl+C')
-		exportAction.setStatusTip('Export data to CSV')
+		exportAction.setStatusTip('Export data to CSV (Ctrl+C)')
 		exportAction.triggered.connect(self.export)
 
 		settingsAction = QtGui.QAction(QtGui.QIcon(r'icons\settings.png'),'&Device settings',self)
@@ -131,6 +131,14 @@ class IVProg(QtGui.QMainWindow):
 		plotSettingsAction = QtGui.QAction(QtGui.QIcon(r'icons\plotsettings.png'),'&Plot settings',self)
 		plotSettingsAction.setStatusTip('Edit settings for plotter')
 		plotSettingsAction.triggered.connect(self.openPlotSettings)
+
+		helpAction = QtGui.QAction(QtGui.QIcon(r'icons\help.png'),'&View help',self)
+		helpAction.setStatusTip('View help file')
+		helpAction.triggered.connect(self.helpFile)
+
+		aboutAction = QtGui.QAction(QtGui.QIcon(r'icons\about.png'),'&About program',self)
+		aboutAction.setStatusTip('About program')
+		aboutAction.triggered.connect(self.aboutProgram)
 
 		menubar = self.menuBar()
 		fileMenu = menubar.addMenu('&File')
@@ -146,6 +154,10 @@ class IVProg(QtGui.QMainWindow):
 		settingsMenu = menubar.addMenu('&Settings')
 		settingsMenu.addAction(settingsAction)
 		settingsMenu.addAction(plotSettingsAction)
+		helpMenu = menubar.addMenu('&Help')
+		helpMenu.addAction(helpAction)
+		helpMenu.addSeparator()
+		helpMenu.addAction(aboutAction)
 		
 		self.toolbar = self.addToolBar('Operations')
 		self.toolbar.setMovable(False)
@@ -579,9 +591,22 @@ class IVProg(QtGui.QMainWindow):
 		except ValueError:
 			pass
 
-
 	def resetPbar(self):
 		self.pbar.reset()
+
+	def helpFile(self):
+		self.helpWindow = HelpWindow()
+		#self.helpWindow.setWindowModality(QtCore.Qt.WindowModality.ApplicationModal)
+		self.helpWindow.hide()
+		self.helpWindow.show()
+
+	def aboutProgram(self):
+		self.aboutBox = QtGui.QMessageBox()
+		self.aboutBox.setText("<b>I-V Tester</b>")
+		self.aboutBox.setInformativeText("Written by Rob Heath (rob@robheath.me.uk) at the University of Glasgow in 2015")
+		self.aboutBox.setIcon(QtGui.QMessageBox.Information)
+		self.aboutBox.setWindowTitle('About program')
+		self.aboutBox.exec_()
 
 class Sim900Thread(QtCore.QObject):
 	def __init__(self,settings,biases):
@@ -1240,6 +1265,21 @@ class IVPlotSettings(QtGui.QMainWindow):
 				self.se[textable[0]] = float(textable[1].text())
 		self.se['unit'] = self.exp_units.currentText() 
 		self.close()
+
+class HelpWindow(QtGui.QWidget):
+	def __init__(self):
+		super(HelpWindow,self).__init__()
+		self.view = QtWebKit.QWebView(self)
+		self.view.load('help\help.html')
+		
+		self.layout = QtGui.QHBoxLayout()
+		self.layout.addWidget(self.view)
+
+		self.setLayout(self.layout)
+		self.resize(800,600)
+		self.setWindowTitle('I-V Tester help')
+		self.setWindowIcon(QtGui.QIcon(r'icons\help.png'))
+		self.show()
 
 def main():
 	app = QtGui.QApplication(sys.argv)
