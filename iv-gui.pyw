@@ -818,10 +818,11 @@ class IVPlot(QtGui.QMainWindow):
 	def updateGraph(self):
 		self.manual_limits_widget.setVisible(self.manual_limits.isChecked())
 		self.title_widget.setVisible(self.give_title.isChecked())
+		self.setExp()
 		self.switchToCurrent()
 		self.handleVoltageOffsets()
 		self.setGraphTitle()
-		self.setExp()
+		#self.setExp()
 		self.verboseGraphToggle()
 		self.setGridlines()
 
@@ -906,8 +907,11 @@ class IVPlot(QtGui.QMainWindow):
 
 	def setExp(self):
 		self.fig.set_dpi(float(self.dpi.text()))
-		self.fig.set_size_inches(float(self.exp_width.text()),float(self.exp_height.text()), forward=True)
-		self.canvas.resize(float(self.dpi.text())*float(self.exp_width.text()),float(self.dpi.text())*float(self.exp_height.text()))
+		self.conversion_factors = {'in':1,'cm':1.0/2.54,'px':(1.0/float(self.dpi.text()))}
+		self.image_height_inches = float(self.exp_height.text())*self.conversion_factors[self.exp_units.currentText()]
+		self.image_width_inches = float(self.exp_width.text())*self.conversion_factors[self.exp_units.currentText()]
+		self.fig.set_size_inches(self.image_width_inches,self.image_height_inches, forward=True)
+		self.canvas.resize(float(self.dpi.text())*self.image_width_inches,float(self.dpi.text())*self.image_height_inches)
 		self.replot()
 
 	def replot(self):
@@ -939,7 +943,7 @@ class IVPlot(QtGui.QMainWindow):
 		if self.give_title.isChecked():
 			try:
 				self.base_of_text = self.fig_title.get_window_extent().get_points()[0][1]
-				self.height_of_plot = float(self.dpi.text())*float(self.exp_height.text())
+				self.height_of_plot = float(self.dpi.text())*self.image_height_inches
 				self.fig.subplots_adjust(top=((self.base_of_text/self.height_of_plot)-0.015))
 			except AttributeError:
 				pass
