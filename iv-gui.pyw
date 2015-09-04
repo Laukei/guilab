@@ -69,6 +69,8 @@ class IVProg(QtGui.QMainWindow):
 		super(IVProg, self).__init__()
 		self.initUI()
 
+	aboutToQuit = QtCore.Signal()
+	
 	def initUI(self):
 		#
 		#   Set up the MENU and TOOLBARS
@@ -332,6 +334,7 @@ class IVProg(QtGui.QMainWindow):
 
 	def closeEvent(self,event):
 		setSettings(self.settings)
+		self.aboutToQuit.emit()
 		self.checkNeedsSaving(event)
 
 	def checkNeedsSaving(self, event=None):
@@ -598,6 +601,7 @@ class IVProg(QtGui.QMainWindow):
 		self.helpWindow = HelpWindow()
 		#self.helpWindow.setWindowModality(QtCore.Qt.WindowModality.ApplicationModal)
 		self.helpWindow.hide()
+		self.aboutToQuit.connect(self.helpWindow.close)
 		self.helpWindow.show()
 
 	def aboutProgram(self):
