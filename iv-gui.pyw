@@ -13,7 +13,7 @@ import time
 import csv
 import os
 #!!!!!!!!!!!!!!!!!
-from fakesim900 import Sim900
+from sim900 import Sim900
 #!!!!!!!!!!!!!!!!!
 from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -70,7 +70,7 @@ class IVProg(QtGui.QMainWindow):
 		self.initUI()
 
 	aboutToQuit = QtCore.Signal()
-	
+
 	def initUI(self):
 		#
 		#   Set up the MENU and TOOLBARS
@@ -378,7 +378,7 @@ class IVProg(QtGui.QMainWindow):
 	def open(self):
 		self.filename_open, _ = QtGui.QFileDialog.getOpenFileName(self,'Open file...','',"I-V data (*.txt);;All data (*.*)")
 		if self.checkNeedsSaving() == False:
-			self.new()
+			self.new(True)
 			self.filename = self.filename_open
 			if self.filename != '':
 				with open(self.filename,'r') as f:
@@ -465,8 +465,8 @@ class IVProg(QtGui.QMainWindow):
 					elif row[1] == 'False':
 						self.metacategories[row[0]].setChecked(False)
 
-	def new(self):
-		if self.checkNeedsSaving() == False:
+	def new(self,save_already_checked = False):
+		if save_already_checked == True or self.checkNeedsSaving() == False:
 			self.filename = ''
 			self.data = [[],[]]
 			for i, item in enumerate(self.list_of_changeables):
@@ -479,8 +479,8 @@ class IVProg(QtGui.QMainWindow):
 			self.updateWindowTitle()
 			self.statusBar().showMessage('NO YOU FOOL! REINITIALISE VALUES!')
 
-	def newSequential(self):
-		if self.checkNeedsSaving()== False:
+	def newSequential(self,save_already_checked=False):
+		if save_already_checked == True or self.checkNeedsSaving()== False:
 			self.filename = ''
 			self.data = [[],[]]
 			self.dateandtime.setText(self.list_of_default_values[self.list_of_changeables.index(self.dateandtime)])
@@ -498,34 +498,40 @@ class IVProg(QtGui.QMainWindow):
 		self.canvas.draw()
 
 	def acquire(self):
-		if len(self.biases) > 0 and (self.data == [[],[]] or self.checkNeedsSaving()== False):
-			self.sim900 = Sim900(self.settings['sim900addr'])
-			if self.sim900.check() != False:
-				if not self.manualtemp.isChecked():
-					self.sim900 = Sim900(self.settings['sim900addr'])
-					self.temp.setText(str(self.sim900.query(self.settings['tsourcemod'],'TVAL? '+str(self.settings['tinput'])+',1')))
-					self.sim900.close()
-				self.haltAction.setEnabled(True)
-				self.acquireAction.setEnabled(False)
-				self.dateandtime.setText(time.asctime())
-				#self.dataThread.finished.connect()
-				self.step = 0
-				print 'launching in separate thread...',
-				self.objThread = QtCore.QThread()
-				self.simThread = Sim900Thread(self.settings,self.biases)
-				self.simThread.moveToThread(self.objThread)
-				self.objThread.started.connect(self.simThread.longRunning)
-				self.simThread.newdata.connect(self.awaitData)
-				self.simThread.finished.connect(self.objThread.quit)
-				self.simThread.finished.connect(self.acquisitionFinished)
-				self.simThread.aborted.connect(self.resetPbar)
-				#self.halt_acquisition.connect(self.simThread.breakout)
-				self.objThread.start()
-				print 'launched'
-				self.replot()
+		if len(self.biases) > 0:
+			if self.data == [[],[]]:
+				self.sim900 = Sim900(self.settings['sim900addr'])
+				self.sim900check = self.sim900.check()
+				if type(self.sim900check) != str:
+					if not self.manualtemp.isChecked():
+						self.sim900 = Sim900(self.settings['sim900addr'])
+						self.temp.setText(str(self.sim900.query(self.settings['tsourcemod'],'TVAL? '+str(self.settings['tinput'])+',1')))
+						self.sim900.close()
+					self.haltAction.setEnabled(True)
+					self.acquireAction.setEnabled(False)
+					self.dateandtime.setText(time.asctime())
+					#self.dataThread.finished.connect()
+					self.step = 0
+					print 'launching in separate thread...',
+					self.objThread = QtCore.QThread()
+					self.simThread = Sim900Thread(self.settings,self.biases)
+					self.simThread.moveToThread(self.objThread)
+					self.objThread.started.connect(self.simThread.longRunning)
+					self.simThread.newdata.connect(self.awaitData)
+					self.simThread.finished.connect(self.objThread.quit)
+					self.simThread.finished.connect(self.acquisitionFinished)
+					self.simThread.aborted.connect(self.resetPbar)
+					#self.halt_acquisition.connect(self.simThread.breakout)
+					self.objThread.start()
+					print 'launched'
+					self.replot()
+				else:
+					self.statusBar().showMessage('ERROR: '+self.sim900check)
+			elif self.checkNeedsSaving() == False:
+				self.newSequential(True)
+				self.acquire()
 			else:
-				self.statusBar().showMessage('SIM900 not responding on '+str(self.settings['sim900addr']))
-
+				self.statusBar().showMessage('Unsaved data!')
 		else:
 			self.statusBar().showMessage('No valid bias range set!')
 
@@ -838,7 +844,7 @@ class IVPlot(QtGui.QMainWindow):
 		self.mainthing.setLayout(self.hbox)
 		#self.setGeometry(300,300,500,400)
 		self.resize(800,600)
-		self.setWindowTitle('I-V Plot')
+		self.setWindowTitle('I-V Plotter')
 		self.setWindowIcon(QtGui.QIcon(r'icons\plot.png'))
 		self.updateGraph()
 		self.showMaximized()
