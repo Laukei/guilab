@@ -163,6 +163,9 @@ class IVProg(QtGui.QMainWindow):
 		
 		self.toolbar = self.addToolBar('Operations')
 		self.toolbar.setMovable(False)
+		self.toolbar.addAction(newSequentialAction)
+		self.toolbar.addAction(saveAction)
+		self.toolbar.addSeparator()
 		self.toolbar.addAction(self.acquireAction)
 		self.toolbar.addAction(self.haltAction)
 		self.toolbar.addSeparator()
@@ -320,6 +323,7 @@ class IVProg(QtGui.QMainWindow):
 		self.setWindowIcon(QtGui.QIcon(r'icons\plot.png'))
 		self.biases = []
 		self.filename = ''
+		self.folder_for_dialogs = ''
 		self.statusBar().showMessage('Ready...')
 		self.setNoNeedSaving()
 		self.show()
@@ -376,11 +380,12 @@ class IVProg(QtGui.QMainWindow):
 		self.setWindowModified(False)
 
 	def open(self):
-		self.filename_open, _ = QtGui.QFileDialog.getOpenFileName(self,'Open file...','',"I-V data (*.txt);;All data (*.*)")
+		self.filename_open, _ = QtGui.QFileDialog.getOpenFileName(self,'Open file...',self.folder_for_dialogs,"I-V data (*.txt);;All data (*.*)")
 		if self.checkNeedsSaving() == False:
-			self.new(True)
-			self.filename = self.filename_open
-			if self.filename != '':
+			if self.filename_open != '':
+				self.new(True)
+				self.filename = self.filename_open
+				self.folder_for_dialogs = self.filename
 				with open(self.filename,'r') as f:
 					self.csvfile = csv.reader(f)
 					self.inputdata = []
@@ -399,13 +404,13 @@ class IVProg(QtGui.QMainWindow):
 						self.data.append([])
 						for column in row:
 							self.data[-1].append(float(column))
-			self.data = list(np.transpose(np.array(self.data)))
-			if self.data == []:
-				self.data = [[],[]]
-			self.setNoNeedSaving()
-			self.replot()
-			self.statusBar().showMessage('Loaded '+str(self.filename))
-			self.updateWindowTitle()
+				self.data = list(np.transpose(np.array(self.data)))
+				if self.data == []:
+					self.data = [[],[]]
+				self.setNoNeedSaving()
+				self.replot()
+				self.statusBar().showMessage('Loaded '+str(self.filename))
+				self.updateWindowTitle()
 
 	def updateWindowTitle(self):
 		if self.filename == '':
@@ -426,8 +431,9 @@ class IVProg(QtGui.QMainWindow):
 			self.setNoNeedSaving()
 
 	def saveAs(self):
-		self.filename, _ = QtGui.QFileDialog.getSaveFileName(self,'Save as...','',"I-V data (*.txt);;All data (*.*)")
+		self.filename, _ = QtGui.QFileDialog.getSaveFileName(self,'Save as...',self.folder_for_dialogs,"I-V data (*.txt);;All data (*.*)")
 		if self.filename != '':
+			self.folder_for_dialogs = self.filename
 			self.save()
 		
 	def processMetadata(self,source=None):
@@ -553,7 +559,7 @@ class IVProg(QtGui.QMainWindow):
 		#self.halt_acquisition.emit()
 
 	def plotExternal(self):
-		self.plotWindow = IVPlot(self.data,self.processMetadata(),self.settings,self.filename)
+		self.plotWindow = IVPlot(self.data,self.processMetadata(),self.settings,self.filename,self.folder_for_dialogs)
 		self.plotWindow.setWindowModality(QtCore.Qt.WindowModality.ApplicationModal)
 		self.plotWindow.hide()
 		self.plotWindow.show()
@@ -659,7 +665,7 @@ class Sim900Thread(QtCore.QObject):
 
 
 class IVPlot(QtGui.QMainWindow):
-	def __init__(self,data,processed_metadata,settings,filename):
+	def __init__(self,data,processed_metadata,settings,filename,folder_for_dialogs):
 		super(IVPlot, self).__init__()
 		self.supplied_voltages = data[0]
 		self.measured_voltages = data[1]
@@ -676,6 +682,7 @@ class IVPlot(QtGui.QMainWindow):
 		self.settings = settings
 		self.se = self.settings['export']
 		self.filename = filename
+		self.folder_for_dialogs = folder_for_dialogs
 		self.initUI()
 
 	def initUI(self):
@@ -892,7 +899,7 @@ class IVPlot(QtGui.QMainWindow):
 		self.filetype_string = self.filetype_string + 'Raw text (*.txt)'
 
 		if self.filename == '':
-			self.target_path = ''
+			self.target_path = self.folder_for_dialogs
 		else:
 			self.target_path = os.path.dirname(self.filename)
 		self.filename, _ = QtGui.QFileDialog.getSaveFileName(self,'Save as...',self.target_path,self.filetype_string,'Portable Network Graphics (*.png)')
