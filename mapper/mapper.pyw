@@ -12,9 +12,9 @@ from PySide import QtGui, QtCore, QtWebKit
 #import time
 #import csv
 #import os
-#!!!!!!!!!!!!!!!!!
-#from sim900 import Sim900
-#!!!!!!!!!!!!!!!!!
+
+from movement import FakeMotor, FakeScanner
+
 from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
@@ -175,6 +175,7 @@ class MapperProg(QtGui.QMainWindow):
 
 		self.movement_tab.setFixedWidth(250)
 		self.measurement_tab.setFixedWidth(250)
+		self.metadata_widget.setFixedWidth(500)
 
 		self.movement_tab.addTab(self.motor_widget,'Motor')
 		self.movement_tab.addTab(self.scanner_widget,'Scanner')
@@ -278,7 +279,8 @@ class MapperProg(QtGui.QMainWindow):
 		self.xto_s = QtGui.QLineEdit('')
 		self.yfrom_s = QtGui.QLineEdit('')
 		self.yto_s = QtGui.QLineEdit('')
-		self.voltstep_s = QtGui.QLineEdit('')
+		self.xvoltstep_s = QtGui.QLineEdit('')
+		self.yvoltstep_s = QtGui.QLineEdit('')
 
 		self.scanner_grid.addWidget(QtGui.QLabel('X range:'),0,0)
 		self.scanner_grid.addWidget(self.xfrom_s,0,1)
@@ -289,8 +291,10 @@ class MapperProg(QtGui.QMainWindow):
 		self.scanner_grid.addWidget(QtGui.QLabel('->'),1,2)
 		self.scanner_grid.addWidget(self.yto_s,1,3)
 
-		self.scanner_grid.addWidget(QtGui.QLabel('Step size:'),2,0)
-		self.scanner_grid.addWidget(self.voltstep_s,2,1)
+		self.scanner_grid.addWidget(QtGui.QLabel('X step:'),2,0)
+		self.scanner_grid.addWidget(self.xvoltstep_s,2,1)
+		self.scanner_grid.addWidget(QtGui.QLabel('Y step:'),2,2)
+		self.scanner_grid.addWidget(self.yvoltstep_s,2,3)
 
 
 		#populate counts grid
@@ -311,9 +315,128 @@ class MapperProg(QtGui.QMainWindow):
 		self.reflec_grid.addWidget(QtGui.QLabel('T<sub>pause</sub>:'),1,0)
 		self.reflec_grid.addWidget(self.pausetime_r,1,1)
 
+		self.key_object_map = {'xfrom_m':self.xfrom_m,
+								'xto_m':self.xto_m,
+								'yfrom_m':self.yfrom_m,
+								'yto_m':self.yto_m,
+								'volt_m':self.volt_m,
+								'freq_m':self.freq_m,
+								'readv_m':self.readv_m,
+								'closedloop_m':self.closedloop_m,
+								'xfrom_s':self.xfrom_s,
+								'xto_s':self.xto_s,
+								'yfrom_s':self.yfrom_s,
+								'yto_s':self.yto_s,
+								'xvoltstep_s':self.xvoltstep_s,
+								'yvoltstep_s':self.yvoltstep_s,
+								'meastime_c':self.meastime_c,
+								'pausetime_c':self.pausetime_c,
+								'meastime_r':self.meastime_r,
+								'pausetime_r':self.pausetime_r}
 
 	def setDefaults(self):
-		pass
+		'''
+		FOR REFERENCE:
+		xfrom_m
+		xto_m
+		yfrom_m
+		yto_m
+		volt_m
+		freq_m
+		readv_m
+		closedloop_m
+		xfrom_s
+		xto_s
+		yfrom_s
+		yto_s
+		xvoltstep_s
+		yvoltstep_s
+		meastime_c
+		pausetime_c
+		meastime_r
+		pausetime_r
+		'''
+		self.key_object_map['xfrom_m'].setText('')
+		self.key_object_map['xto_m'].setText('')
+		self.key_object_map['yfrom_m'].setText('')
+		self.key_object_map['yto_m'].setText('')
+		self.key_object_map['volt_m'].setText('40')
+		self.key_object_map['freq_m'].setText('100')
+		self.key_object_map['readv_m'].setText('1')
+		self.key_object_map['closedloop_m'].setChecked(False)
+		self.key_object_map['xfrom_s'].setText('0')
+		self.key_object_map['xto_s'].setText('10')
+		self.key_object_map['yfrom_s'].setText('0')
+		self.key_object_map['yto_s'].setText('10')
+		self.key_object_map['xvoltstep_s'].setText('1')
+		self.key_object_map['yvoltstep_s'].setText('1')
+		self.key_object_map['meastime_c'].setText('0.7')
+		self.key_object_map['pausetime_c'].setText('0.2')
+		self.key_object_map['meastime_r'].setText('0.05')
+		self.key_object_map['pausetime_r'].setText('0.05')
+
+	def acquire(self):
+		#first: work out what measurement we're trying to run
+		#by finding which tabs are selected
+		self.meas_par = {}
+		try:
+			if self.movement_tab.currentWidget() == self.motor_widget:
+				self.meas_par['mtype'] = 'm'
+				self.meas_par['xf'] = float(self.xfrom_m.text())
+				self.meas_par['xt'] = float(self.xto_m.text())
+				self.meas_par['yf'] = float(self.yfrom_m.text())
+				self.meas_par['yt'] = float(self.yto_m.text())
+				self.meas_par['v'] = float(self.volt_m.text())
+				self.meas_par['f'] = float(self.freq_m.text())
+				self.meas_par['vr'] = float(self.readv_m.text())
+				self.meas_par['cl'] = self.closedloop_m.isChecked()
+			elif self.movement_tab.currentWidget() == self.scanner_widget:
+				self.meas_par['mtype'] = 's'
+				self.meas_par['xf'] = float(self.xfrom_s.text())
+				self.meas_par['xt'] = float(self.xto_s.text())
+				self.meas_par['yf'] = float(self.yfrom_s.text())
+				self.meas_par['yt'] = float(self.yto_s.text())
+				self.meas_par['xv'] = float(self.xvoltstep_s.text())
+				self.meas_par['yv'] = float(self.yvoltstep_s.text())
+			else:
+				self.statusBar().showMessage('Unable to identify movement type...')
+				return
+
+			if self.measurement_tab.currentWidget() == self.reflec_widget:
+				self.meas_par['mtype'] += 'r'
+				self.meas_par['tm'] = float(self.meastime_r.text())
+				self.meas_par['tp'] = float(self.pausetime_r.text())
+			elif self.measurement_tab.currentWidget() == self.count_widget:
+				self.meas_par['mtype'] += 'c'
+				self.meas_par['tm'] = float(self.meastime_c.text())
+				self.meas_par['tp'] = float(self.pausetime_c.text())
+			else:
+				self.statusBar().showMessage('Unable to identify measurement type...')
+				return
+		except ValueError as e:
+			self.statusBar().showMessage('ERROR: '+str(e))
+			return
+		#then check input values (ranges, etc)
+		#tests is a series of tests to be checked against
+
+		self.tests = {'m':	[[['xt','xf','yf','yt'],[0,5],'X/Y range(s) out of bounds'],
+							[['v'],[0.01,70],'Voltage out of bounds'],
+							[['f'],[1,1000],'Frequency out of bounds'],
+							[['vr'],[0,2],'Readout voltage out of bounds']],
+					  's':	[[['xt','xf','yf','yt'],[0,10],'X/Y range(s) out of bounds'],
+					  		[['xv','yv'],[0,1],'X/Y step size out of bounds']],
+					  'r':  [[['tp','tm'],[0,2],'Time(s) out of bounds']],
+					  'c':  [[['tp','tm'],[0,2],'Time(s) out of bounds']]}
+		for test_set in self.tests.keys():
+			if test_set in self.meas_par['mtype']:
+				for test in self.tests[test_set]:
+					for key in test[0]:
+						if not (test[1][0] <= self.meas_par[key] <= test[1][1]):
+							self.statusBar().showMessage(test[2]+': '+str(self.meas_par[key])+' outside limits '+str(test[1][0])+', '+str(test[1][1]))
+							return
+		#then launch the process and pass the values
+
+
 
 	def new(self):
 		pass
@@ -328,9 +451,6 @@ class MapperProg(QtGui.QMainWindow):
 		pass
 
 	def saveAs(self):
-		pass
-
-	def acquire(self):
 		pass
 
 	def halt(self):
@@ -356,15 +476,21 @@ class MapperProg(QtGui.QMainWindow):
 
 
 class MapperDrone(QtCore.QObject):
-	def __init__(self):
+	def __init__(self,meas_par):
 		super(MapperDrone,self).__init__()
 		#handle stuff passed in
 		self.abort = False
+		self.meas_par = meas_par
 		
+
 
 	def longRunning(self):
 		#do the things that take a long time
 		pass
+
+
+
+
 
 
 def main():
