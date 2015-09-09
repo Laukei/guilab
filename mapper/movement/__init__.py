@@ -12,6 +12,7 @@ except:
 	print 'attolib failed to load'
 
 import time
+import random
 
 def findClass(key):
 	index = {
@@ -55,17 +56,17 @@ class FakeMotor(Mover):
 			return self.pos
 
 	def moveUp(self,axis):
-		self.pos[axis] += self.clicks * 0.001
+		self.pos[axis] += self.clicks * 0.001 + random.gauss(0,0.001)
 		time.sleep(0.1)
 		return True
 
 	def moveDown(self,axis):
-		self.pos[axis] -= self.clicks * 0.001
+		self.pos[axis] -= self.clicks * 0.001 + random.gauss(0,0.001)
 		time.sleep(0.1)
 		return True
 
 	def moveTo(self,axis,position):
-		self.pos[axis] = position
+		self.pos[axis] = position+random.gauss(0,0.001)
 		time.sleep(0.5)
 		return True
 

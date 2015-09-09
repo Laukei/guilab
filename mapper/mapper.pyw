@@ -5,14 +5,17 @@ import sys
 import matplotlib
 matplotlib.use('Qt4Agg')
 import matplotlib.pyplot as plt
+import matplotlib.tri as tri
 import numpy as np
 #import math
 from PySide import QtGui, QtCore, QtWebKit
+
 #import json
 #import time
 #import csv
 #import os
 
+import colormaps
 import movement
 import measurement
 
@@ -188,10 +191,10 @@ class MapperProg(QtGui.QMainWindow):
 		self.measurement_tab.addTab(self.count_widget,'Counts')
 
 		#create graph
-		self.data = [[],[]]
+		self.data = []
 		self.fig = plt.figure(figsize = (4.5,4), dpi=72, facecolor=(1,1,1), edgecolor=(0,0,0))
 		self.ax = self.fig.add_subplot(1,1,1)
-		self.plot, = plt.plot(*self.data)
+		#self.plot = plt.tricontourf(self.data)#*self.data)
 		self.ax.set_ylabel('dunno')
 		self.ax.set_xlabel('nobody told me')
 		self.canvas = FigureCanvas(self.fig)
@@ -393,6 +396,7 @@ class MapperProg(QtGui.QMainWindow):
 		#first: work out what measurement we're trying to run
 		#by finding which tabs are selected
 		self.meas_par = {}
+		self.data = []
 		try:
 			if self.movement_tab.currentWidget() == self.motor_widget:
 				self.meas_par['mtype'] = 'm'
@@ -478,7 +482,15 @@ class MapperProg(QtGui.QMainWindow):
 		print 'launched'
 
 	def getData(self, data):
-		print data
+		self.data.append(data)
+		self.updatePreview()
+
+	def updatePreview(self):
+		self.data_array = np.array(self.data).transpose()
+		#self.triang = tri.Triangulation(self.data_array[0],self.data_array[1])
+		self.contourf = plt.tricontourf(self.data_array[0],self.data_array[1],self.data_array[4],cmap=colormaps.viridis)
+		self.plot = plt.plot(self.data_array[0], self.data_array[1],'ko',ms=3)
+		self.canvas.draw()
 
 	def acquisitionFinished(self):
 		pass
