@@ -13,7 +13,8 @@ from PySide import QtGui, QtCore, QtWebKit
 #import csv
 #import os
 
-from movement import FakeMotor, FakeScanner
+import movement
+import measurement
 
 from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -21,7 +22,10 @@ from matplotlib.figure import Figure
 
 
 def getSettings():
-	pass
+	return {'scannertype':'fakescanner',
+			'motortype':'fakemotor',
+			'countertype':'fakecounter',
+			'reflectype':'fakereflec'}
 
 class MapperProg(QtGui.QMainWindow):
 	def __init__(self):
@@ -253,7 +257,10 @@ class MapperProg(QtGui.QMainWindow):
 		self.volt_m = QtGui.QLineEdit('')
 		self.freq_m = QtGui.QLineEdit('')
 		self.readv_m = QtGui.QLineEdit('')
-		self.closedloop_m = QtGui.QCheckBox('Closed-loop operation?')
+		self.clicks_m = QtGui.QLineEdit('')
+
+		self.closedloop_m = QtGui.QCheckBox('Closed-loop operation? [not implemented]')
+		self.closedloop_m.setEnabled(False)
 
 		self.motor_grid.addWidget(QtGui.QLabel('X range:'),0,0)
 		self.motor_grid.addWidget(self.xfrom_m,0,1)
@@ -268,10 +275,14 @@ class MapperProg(QtGui.QMainWindow):
 		self.motor_grid.addWidget(self.volt_m,2,1)
 		self.motor_grid.addWidget(QtGui.QLabel('Freq:'),2,2)
 		self.motor_grid.addWidget(self.freq_m,2,3)
-		self.motor_grid.addWidget(QtGui.QLabel('V<sub>read</sub>:'),3,0)
-		self.motor_grid.addWidget(self.readv_m,3,1)
+		self.motor_grid.addWidget(QtGui.QLabel('V<sub>read</sub>:'),3,2)
+		self.motor_grid.addWidget(self.readv_m,3,3)
+		self.motor_grid.addWidget(QtGui.QLabel('Clicks:'),3,0)
+		self.motor_grid.addWidget(self.clicks_m,3,1)
 		#self.motor_grid.addWidget(QtGui.QLabel('->'),1,2)
-		self.motor_grid.addWidget(self.closedloop_m,3,2,1,2)
+		self.motor_grid.addWidget(self.closedloop_m,4,0,1,4)
+
+
 
 
 		#populate scanner grid
@@ -321,6 +332,7 @@ class MapperProg(QtGui.QMainWindow):
 								'yto_m':self.yto_m,
 								'volt_m':self.volt_m,
 								'freq_m':self.freq_m,
+								'clicks_m':self.clicks_m,
 								'readv_m':self.readv_m,
 								'closedloop_m':self.closedloop_m,
 								'xfrom_s':self.xfrom_s,
@@ -343,6 +355,7 @@ class MapperProg(QtGui.QMainWindow):
 		yto_m
 		volt_m
 		freq_m
+		clicks_m
 		readv_m
 		closedloop_m
 		xfrom_s
@@ -363,6 +376,7 @@ class MapperProg(QtGui.QMainWindow):
 		self.key_object_map['volt_m'].setText('40')
 		self.key_object_map['freq_m'].setText('100')
 		self.key_object_map['readv_m'].setText('1')
+		self.key_object_map['clicks_m'].setText('10')
 		self.key_object_map['closedloop_m'].setChecked(False)
 		self.key_object_map['xfrom_s'].setText('0')
 		self.key_object_map['xto_s'].setText('10')
@@ -389,6 +403,7 @@ class MapperProg(QtGui.QMainWindow):
 				self.meas_par['v'] = float(self.volt_m.text())
 				self.meas_par['f'] = float(self.freq_m.text())
 				self.meas_par['vr'] = float(self.readv_m.text())
+				self.meas_par['c'] = float(self.clicks_m.text())
 				self.meas_par['cl'] = self.closedloop_m.isChecked()
 			elif self.movement_tab.currentWidget() == self.scanner_widget:
 				self.meas_par['mtype'] = 's'
@@ -422,7 +437,8 @@ class MapperProg(QtGui.QMainWindow):
 		self.tests = {'m':	[[['xt','xf','yf','yt'],[0,5],'X/Y range(s) out of bounds'],
 							[['v'],[0.01,70],'Voltage out of bounds'],
 							[['f'],[1,1000],'Frequency out of bounds'],
-							[['vr'],[0,2],'Readout voltage out of bounds']],
+							[['vr'],[0,2],'Readout voltage out of bounds'],
+							[['c'],[1,1000],'Clicks out of bounds']],
 					  's':	[[['xt','xf','yf','yt'],[0,10],'X/Y range(s) out of bounds'],
 					  		[['xv','yv'],[0,1],'X/Y step size out of bounds']],
 					  'r':  [[['tp','tm'],[0,2],'Time(s) out of bounds']],
@@ -434,9 +450,41 @@ class MapperProg(QtGui.QMainWindow):
 						if not (test[1][0] <= self.meas_par[key] <= test[1][1]):
 							self.statusBar().showMessage(test[2]+': '+str(self.meas_par[key])+' outside limits '+str(test[1][0])+', '+str(test[1][1]))
 							return
+		#connect to instrumentation and pass handles through
+		if 'm' in self.meas_par['mtype']:
+			self.meas_par['mover'] = movement.findClass(self.settings['motortype'])()
+
+		elif 's' in self.meas_par['mtype']:
+			self.meas_par['mover'] = movement.findClass(self.settings['scannertype'])()
+
+		
+		if 'r' in self.meas_par['mtype']:
+			self.meas_par['measurer'] = measurement.findClass(self.settings['reflectype'])()
+
+		elif 'c' in self.meas_par['mtype']:
+			self.meas_par['measurer'] = measurement.findClass(self.settings['countertype'])()
+
 		#then launch the process and pass the values
+		print 'launching in separate thread...',
+		self.obj_thread = QtCore.QThread()
+		self.mapper_drone = MapperDrone(self.meas_par)
+		self.mapper_drone.moveToThread(self.obj_thread)
+		self.obj_thread.started.connect(self.mapper_drone.runScan)
+		self.mapper_drone.newdata.connect(self.getData)
+		self.mapper_drone.finished.connect(self.obj_thread.quit)
+		self.mapper_drone.finished.connect(self.acquisitionFinished)
+		self.mapper_drone.aborted.connect(self.resetPbar)
+		self.obj_thread.start()
+		print 'launched'
 
+	def getData(self, data):
+		print data
 
+	def acquisitionFinished(self):
+		pass
+
+	def resetPbar(self):
+		pass
 
 	def new(self):
 		pass
@@ -481,16 +529,92 @@ class MapperDrone(QtCore.QObject):
 		#handle stuff passed in
 		self.abort = False
 		self.meas_par = meas_par
+		self.mover = meas_par['mover']
+		self.measurer = meas_par['measurer']
 		
+	finished = QtCore.Signal()
+	newdata = QtCore.Signal(list)
+	aborted = QtCore.Signal()
 
+	def runScan(self):
+		self.init() #readies mover/measurer
 
-	def longRunning(self):
-		#do the things that take a long time
-		pass
+		#print self.meas_par
+		print 'homing x,y'
+		self.mover.moveTo('x',self.meas_par['xf'])
+		self.mover.moveTo('y',self.meas_par['yf'])
+		print 'homed to:',self.mover.getPos()
+		self.step = {'x':0,'y':0}
+		self.xgoesup = self.meas_par['xt'] > self.meas_par['xf']
+		self.ygoesup = self.meas_par['yt'] > self.meas_par['yf']
+		self.dataset = []
+		while self.step['y'] <= self.y_steps and self.abort == False:
+			while self.step['x'] <= self.x_steps and self.abort == False:
+				self.pos = self.mover.getPos()
+				self.meas = self.measurer.getMeasurement()
+				self.dataset.append([self.pos['x'],self.pos['y'],self.step['x'],self.step['y'],self.meas])
+				self.newdata.emit(self.dataset[-1])
+				if (self.x_steps == float('inf') and self.xgoesup and self.pos['x'] > self.meas_par['xt']) or (
+				   self.x_steps == float('inf') and not self.xgoesup and self.pos['x'] < self.meas_par['xt']):
+					self.x_steps = self.step['x']
+					break
 
+				self.step['x']+=1
+				if self.xgoesup: #if xto > xfrom:
+					self.mover.moveUp('x')
+				else:
+					self.mover.moveDown('x')
+			if self.abort == True:
+				self.aborted.emit()
+				return	
 
+			self.step['x']=0
+			if (self.y_steps == float('inf') and self.ygoesup and self.pos['y'] > self.meas_par['yt']) or (
+			   self.y_steps == float('inf') and not self.ygoesup and self.pos['y'] < self.meas_par['yt']):
+				self.y_steps = self.step['y']
+				break
 
+			self.mover.moveTo('x',self.meas_par['xf'])
+			self.step['y']+=1
+			if self.ygoesup: #if xto > xfrom:
+				self.mover.moveUp('y')
+			else:
+				self.mover.moveDown('y')
 
+		if self.abort == True:
+			self.aborted.emit()
+			return	
+		else:
+			self.mover.moveTo('y',self.meas_par['yf'])
+			print 'done'
+			self.mover.close()
+			self.measurer.close()
+			self.finished.emit()
+
+	def init(self):
+		#perform setup of devices
+		if 'm' in self.meas_par['mtype']:
+			self.mover.setDefaults( self.meas_par['v'],
+									self.meas_par['f'],
+									self.meas_par['c'],
+									self.meas_par['vr'])
+			if self.meas_par['cl'] == True:
+				print 'need to generate list of positions in case where '
+				print '(currently do not have UI input that makes sense for this!)'
+			elif self.meas_par['cl'] == False:
+				self.x_steps = float('inf')
+				self.y_steps = float('inf')
+		elif 's' in self.meas_par['mtype']:
+			self.mover.setDefaults(	self.meas_par['xv'],
+									self.meas_par['yv'])
+			self.x_steps = abs(self.meas_par['xt']-self.meas_par['xf'])/self.meas_par['xv']
+			self.y_steps = abs(self.meas_par['yt']-self.meas_par['yf'])/self.meas_par['yv']
+		if 'r' in self.meas_par['mtype']:
+			self.measurer.setDefaults(	self.meas_par['tm'],
+										self.meas_par['tp'])
+		elif 'c' in self.meas_par['mtype']:
+			self.measurer.setDefaults(	self.meas_par['tm'],
+										self.meas_par['tp'])
 
 
 def main():
