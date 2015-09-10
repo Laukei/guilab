@@ -224,10 +224,14 @@ class MapperProg(QtGui.QMainWindow):
 		self.manualtemp = QtGui.QCheckBox('Manual?')
 		self.temp = QtGui.QLineEdit('')
 		self.comment = QtGui.QLineEdit('')
+		self.manualbias = QtGui.QCheckBox('Manual?')
+		self.bias = QtGui.QLineEdit('')
 
 		self.dateandtime.setEnabled(False)
 		self.manualtemp.stateChanged.connect(self.temp.setEnabled)
+		self.manualbias.stateChanged.connect(self.bias.setEnabled)
 		self.temp.setEnabled(False)
+		self.bias.setEnabled(False)
 
 		self.metadata_grid.setSpacing(10)
 		self.subgrid1 = QtGui.QGridLayout()
@@ -247,10 +251,13 @@ class MapperProg(QtGui.QMainWindow):
 		self.subgrid1.addWidget(self.manualtemp,0,0)
 		self.subgrid1.addWidget(QtGui.QLabel('Temp:'),0,1)
 		self.subgrid1.addWidget(self.temp,0,2)
-		self.metadata_grid.addLayout(self.subgrid1,2,2,1,2)
+		self.subgrid1.addWidget(self.manualbias,1,0)
+		self.subgrid1.addWidget(QtGui.QLabel('Bias:'),1,1)
+		self.subgrid1.addWidget(self.bias,1,2)
+		self.metadata_grid.addLayout(self.subgrid1,2,2,2,2)
 
 		self.metadata_grid.addWidget(QtGui.QLabel('Comments:'),3,0)
-		self.metadata_grid.addWidget(self.comment,3,1,1,3)
+		self.metadata_grid.addWidget(self.comment,3,1)
 
 		#populate motor_grid
 		self.xfrom_m = QtGui.QLineEdit('')
