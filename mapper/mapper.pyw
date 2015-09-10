@@ -261,9 +261,9 @@ class MapperProg(QtGui.QMainWindow):
 		self.freq_m = QtGui.QLineEdit('')
 		self.readv_m = QtGui.QLineEdit('')
 		self.clicks_m = QtGui.QLineEdit('')
-
-		self.closedloop_m = QtGui.QCheckBox('Closed-loop operation? [not implemented]')
-		self.closedloop_m.setEnabled(False)
+		self.numpoints_m = QtGui.QLineEdit('')
+		self.closedloop_m = QtGui.QCheckBox('Closed-loop')
+		self.numpoints_m.setEnabled(False)
 
 		self.motor_grid.addWidget(QtGui.QLabel('X range:'),0,0)
 		self.motor_grid.addWidget(self.xfrom_m,0,1)
@@ -283,10 +283,14 @@ class MapperProg(QtGui.QMainWindow):
 		self.motor_grid.addWidget(QtGui.QLabel('Clicks:'),3,0)
 		self.motor_grid.addWidget(self.clicks_m,3,1)
 		#self.motor_grid.addWidget(QtGui.QLabel('->'),1,2)
-		self.motor_grid.addWidget(self.closedloop_m,4,0,1,4)
+		self.motor_grid.addWidget(self.closedloop_m,4,0,1,2)
+		self.motor_grid.addWidget(QtGui.QLabel('Points:'),4,2)
+		self.motor_grid.addWidget(self.numpoints_m,4,3)
 
-
-
+		self.closedloop_m.stateChanged.connect(self.numpoints_m.setEnabled)
+		self.closedloop_m.stateChanged.connect(self.clicks_m.setDisabled)
+		self.closedloop_m.stateChanged.connect(self.volt_m.setDisabled)
+		self.closedloop_m.stateChanged.connect(self.freq_m.setDisabled)
 
 		#populate scanner grid
 		self.xfrom_s = QtGui.QLineEdit('')
@@ -338,6 +342,7 @@ class MapperProg(QtGui.QMainWindow):
 								'clicks_m':self.clicks_m,
 								'readv_m':self.readv_m,
 								'closedloop_m':self.closedloop_m,
+								'numpoints_m':self.numpoints_m,
 								'xfrom_s':self.xfrom_s,
 								'xto_s':self.xto_s,
 								'yfrom_s':self.yfrom_s,
@@ -361,6 +366,7 @@ class MapperProg(QtGui.QMainWindow):
 		clicks_m
 		readv_m
 		closedloop_m
+		numpoints_m
 		xfrom_s
 		xto_s
 		yfrom_s
@@ -381,6 +387,7 @@ class MapperProg(QtGui.QMainWindow):
 		self.key_object_map['readv_m'].setText('1')
 		self.key_object_map['clicks_m'].setText('10')
 		self.key_object_map['closedloop_m'].setChecked(False)
+		self.key_object_map['numpoints_m'].setText('20')
 		self.key_object_map['xfrom_s'].setText('0')
 		self.key_object_map['xto_s'].setText('10')
 		self.key_object_map['yfrom_s'].setText('0')
@@ -399,16 +406,19 @@ class MapperProg(QtGui.QMainWindow):
 		self.data = []
 		try:
 			if self.movement_tab.currentWidget() == self.motor_widget:
-				self.meas_par['mtype'] = 'm'
 				self.meas_par['xf'] = float(self.xfrom_m.text())
 				self.meas_par['xt'] = float(self.xto_m.text())
 				self.meas_par['yf'] = float(self.yfrom_m.text())
 				self.meas_par['yt'] = float(self.yto_m.text())
-				self.meas_par['v'] = float(self.volt_m.text())
-				self.meas_par['f'] = float(self.freq_m.text())
 				self.meas_par['vr'] = float(self.readv_m.text())
-				self.meas_par['c'] = float(self.clicks_m.text())
-				self.meas_par['cl'] = self.closedloop_m.isChecked()
+				if self.closedloop_m.isChecked() == False:
+					self.meas_par['mtype'] = 'm'
+					self.meas_par['v'] = float(self.volt_m.text())
+					self.meas_par['f'] = float(self.freq_m.text())
+					self.meas_par['c'] = float(self.clicks_m.text())
+				elif self.closedloop_m.isChecked() == True:
+					self.meas_par['mtype'] = 'M'
+					self.meas_par['n'] = float(self.numpoints_m.text())
 			elif self.movement_tab.currentWidget() == self.scanner_widget:
 				self.meas_par['mtype'] = 's'
 				self.meas_par['xf'] = float(self.xfrom_s.text())
@@ -443,6 +453,9 @@ class MapperProg(QtGui.QMainWindow):
 							[['f'],[1,1000],'Frequency out of bounds'],
 							[['vr'],[0,2],'Readout voltage out of bounds'],
 							[['c'],[1,1000],'Clicks out of bounds']],
+					  'M':	[[['xt','xf','yf','yt'],[0,5],'X/Y range(s) out of bounds'],
+							[['vr'],[0,2],'Readout voltage out of bounds'],
+							[['n'],[2,1000],'Number of points out of bounds']],
 					  's':	[[['xt','xf','yf','yt'],[0,10],'X/Y range(s) out of bounds'],
 					  		[['xv','yv'],[0,1],'X/Y step size out of bounds']],
 					  'r':  [[['tp','tm'],[0,2],'Time(s) out of bounds']],
@@ -455,7 +468,7 @@ class MapperProg(QtGui.QMainWindow):
 							self.statusBar().showMessage(test[2]+': '+str(self.meas_par[key])+' outside limits '+str(test[1][0])+', '+str(test[1][1]))
 							return
 		#connect to instrumentation and pass handles through
-		if 'm' in self.meas_par['mtype']:
+		if 'm' in self.meas_par['mtype'] or 'M' in self.meas_par['mtype']:
 			self.meas_par['mover'] = movement.findClass(self.settings['motortype'])()
 
 		elif 's' in self.meas_par['mtype']:
@@ -487,8 +500,15 @@ class MapperProg(QtGui.QMainWindow):
 
 	def updatePreview(self):
 		self.data_array = np.array(self.data).transpose()
+		self.fig.clear()
 		#self.triang = tri.Triangulation(self.data_array[0],self.data_array[1])
-		self.contourf = plt.tricontourf(self.data_array[0],self.data_array[1],self.data_array[4],cmap=colormaps.viridis)
+		self.ax.clear()
+		try:
+			self.contourf = plt.tricontourf(self.data_array[0],self.data_array[1],self.data_array[4],cmap=colormaps.viridis)
+		except RuntimeError:
+			pass
+		except ValueError:
+			pass
 		self.plot = plt.plot(self.data_array[0], self.data_array[1],'ko',ms=3)
 		self.canvas.draw()
 
@@ -570,12 +590,16 @@ class MapperDrone(QtCore.QObject):
 				   self.x_steps == float('inf') and not self.xgoesup and self.pos['x'] < self.meas_par['xt']):
 					self.x_steps = self.step['x']
 					break
-
 				self.step['x']+=1
-				if self.xgoesup: #if xto > xfrom:
-					self.mover.moveUp('x')
+				if self.step['x']>=self.x_steps:
+					break
+				if 'M' in self.meas_par['mtype']:
+					self.mover.moveTo('x',self.x_steplist[self.step['x']])
 				else:
-					self.mover.moveDown('x')
+					if self.xgoesup: #if xto > xfrom:
+						self.mover.moveUp('x')
+					else:
+						self.mover.moveDown('x')
 			if self.abort == True:
 				self.aborted.emit()
 				return	
@@ -588,10 +612,15 @@ class MapperDrone(QtCore.QObject):
 
 			self.mover.moveTo('x',self.meas_par['xf'])
 			self.step['y']+=1
-			if self.ygoesup: #if xto > xfrom:
-				self.mover.moveUp('y')
+			if self.step['y']>=self.y_steps:
+				break
+			if 'M' in self.meas_par['mtype']:
+				self.mover.moveTo('y',self.x_steplist[self.step['y']])
 			else:
-				self.mover.moveDown('y')
+				if self.ygoesup: #if xto > xfrom:
+					self.mover.moveUp('y')
+				else:
+					self.mover.moveDown('y')
 
 		if self.abort == True:
 			self.aborted.emit()
@@ -610,17 +639,20 @@ class MapperDrone(QtCore.QObject):
 									self.meas_par['f'],
 									self.meas_par['c'],
 									self.meas_par['vr'])
-			if self.meas_par['cl'] == True:
-				print 'need to generate list of positions in case where '
-				print '(currently do not have UI input that makes sense for this!)'
-			elif self.meas_par['cl'] == False:
-				self.x_steps = float('inf')
-				self.y_steps = float('inf')
+			self.x_steps = float('inf')
+			self.y_steps = float('inf')
+		elif 'M' in self.meas_par['mtype']:
+			self.mover.setClosedCircuitDefaults(1000,self.meas_par['vr'])
+			self.x_steps = self.meas_par['n']+1
+			self.y_steps = self.meas_par['n']+1
+			self.x_steplist = np.linspace(self.meas_par['xf'],self.meas_par['xt'],self.x_steps)
+			self.y_steplist = np.linspace(self.meas_par['yf'],self.meas_par['yt'],self.y_steps)
 		elif 's' in self.meas_par['mtype']:
 			self.mover.setDefaults(	self.meas_par['xv'],
 									self.meas_par['yv'])
 			self.x_steps = abs(self.meas_par['xt']-self.meas_par['xf'])/self.meas_par['xv']
 			self.y_steps = abs(self.meas_par['yt']-self.meas_par['yf'])/self.meas_par['yv']
+
 		if 'r' in self.meas_par['mtype']:
 			self.measurer.setDefaults(	self.meas_par['tm'],
 										self.meas_par['tp'])

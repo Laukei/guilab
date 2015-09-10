@@ -48,6 +48,11 @@ class FakeMotor(Mover):
 		self.frequency = frequency
 		self.clicks = clicks
 		self.readvoltage = readvoltage
+		self.open_movement = True
+
+	def setClosedCircuitDefaults(self,frequency,readvoltage):
+		self.readvoltage = readvoltage
+		self.frequency = frequency
 
 	def getPos(self,axis=None):
 		if axis != None:
