@@ -190,15 +190,7 @@ class MapperProg(QtGui.QMainWindow):
 		self.measurement_tab.addTab(self.reflec_widget,'Reflection')
 		self.measurement_tab.addTab(self.count_widget,'Counts')
 
-		#create graph
-		self.data = []
-		self.fig = plt.figure(figsize = (4.5,4), dpi=72, facecolor=(1,1,1), edgecolor=(0,0,0))
-		self.ax = self.fig.add_subplot(1,1,1)
-		#self.plot = plt.tricontourf(self.data)#*self.data)
-		self.ax.set_ylabel('dunno')
-		self.ax.set_xlabel('nobody told me')
-		self.canvas = FigureCanvas(self.fig)
-		self.fig.tight_layout()
+		self.checkForGraph() #does the graph
 
 		self.hbox = QtGui.QHBoxLayout()
 		self.tabhbox = QtGui.QHBoxLayout()
@@ -411,6 +403,7 @@ class MapperProg(QtGui.QMainWindow):
 		#by finding which tabs are selected
 		self.meas_par = {}
 		self.data = []
+		self.colorbar_max = -float('inf')
 		try:
 			if self.movement_tab.currentWidget() == self.motor_widget:
 				self.meas_par['xf'] = float(self.xfrom_m.text())
@@ -489,7 +482,7 @@ class MapperProg(QtGui.QMainWindow):
 			self.meas_par['measurer'] = measurement.findClass(self.settings['countertype'])()
 
 		#then launch the process and pass the values
-		print 'launching in separate thread...',
+		#print 'launching in separate thread...',
 		self.obj_thread = QtCore.QThread()
 		self.mapper_drone = MapperDrone(self.meas_par)
 		self.mapper_drone.moveToThread(self.obj_thread)
@@ -498,17 +491,20 @@ class MapperProg(QtGui.QMainWindow):
 		self.mapper_drone.finished.connect(self.obj_thread.quit)
 		self.mapper_drone.finished.connect(self.acquisitionFinished)
 		self.mapper_drone.aborted.connect(self.resetPbar)
+		self.mapper_drone.xSteps.connect(self.getXSteps)
 		self.obj_thread.start()
-		print 'launched'
+		#print 'launched'
 
 	def getData(self, data):
 		self.data.append(data)
-		self.updatePreview()
+		self.updatePreviewGrid()
+
+	def getXSteps(self,x_steps):
+		self.x_steps = x_steps
 
 	def updatePreview(self):
 		self.data_array = np.array(self.data).transpose()
 		self.fig.clear()
-		#self.triang = tri.Triangulation(self.data_array[0],self.data_array[1])
 		self.ax.clear()
 		try:
 			self.contourf = plt.tricontourf(self.data_array[0],self.data_array[1],self.data_array[4],cmap=colormaps.viridis)
@@ -516,8 +512,49 @@ class MapperProg(QtGui.QMainWindow):
 			pass
 		except ValueError:
 			pass
-		self.plot = plt.plot(self.data_array[0], self.data_array[1],'ko',ms=3)
+
+		try:
+			self.cbar = plt.colorbar()
+		except RuntimeError:
+			pass
+
+		self.colordata = []
+		for value in [((x-min(self.data_array[4]))/(max(self.data_array[4]-min(self.data_array[4])))) for x in self.data_array[4]]:
+			self.colordata.append(colormaps.viridis(value))
+
+		for v, value in enumerate(self.data_array[0]):
+			self.plot = plt.plot([self.data_array[0][v]], [self.data_array[1][v]],'o',color=self.colordata[v],ms=10)
+
 		self.canvas.draw()
+
+	def updatePreviewGrid(self):
+		self.data_array = np.array(self.data).transpose()
+		self.fig.clear()
+		self.ax.clear()
+		self.z_data = [list(self.data_array[4][x:x+self.x_steps]) for x in range(0,len(self.data_array[4]),self.x_steps)]
+		#except:
+		#	self.z_data = [list(self.data_array[4])]
+		if len(self.z_data[-1]) < len(self.z_data[0]):
+			self.z_data[-1] += [np.nan]*(len(self.z_data[0]) - len(self.z_data[-1]))
+
+		self.z_data = self.z_data[::-1]
+		plt.imshow(self.z_data,extent=(self.data_array[0].min(), self.data_array[0].max(), self.data_array[1].min(),
+			self.data_array[1].max()), interpolation='nearest',cmap=colormaps.viridis)
+		self.cbar = plt.colorbar()
+		self.canvas.draw()
+
+	def checkForGraph(self):
+		try:
+			self.canvas
+		except AttributeError:
+			self.data = np.array([[]])
+			self.fig = plt.figure(figsize = (4.5,4), dpi=72, facecolor=(1,1,1), edgecolor=(0,0,0))
+			self.ax = self.fig.add_subplot(1,1,1)
+			#self.plot = plt.tricontourf(self.data)#*self.data)
+			self.ax.set_ylabel('dunno')
+			self.ax.set_xlabel('nobody told me')
+			self.canvas = FigureCanvas(self.fig)
+			self.fig.tight_layout()
 
 	def acquisitionFinished(self):
 		pass
@@ -574,42 +611,70 @@ class MapperDrone(QtCore.QObject):
 	finished = QtCore.Signal()
 	newdata = QtCore.Signal(list)
 	aborted = QtCore.Signal()
+	xSteps = QtCore.Signal(int)
 
 	def runScan(self):
 		self.init() #readies mover/measurer
-
-		#print self.meas_par
-		print 'homing x,y'
 		self.mover.moveTo('x',self.meas_par['xf'])
 		self.mover.moveTo('y',self.meas_par['yf'])
-		print 'homed to:',self.mover.getPos()
-		self.step = {'x':0,'y':0}
+		#print 'homed to:',self.mover.getPos()
 		self.xgoesup = self.meas_par['xt'] > self.meas_par['xf']
 		self.ygoesup = self.meas_par['yt'] > self.meas_par['yf']
 		self.dataset = []
-		while self.step['y'] <= self.y_steps and self.abort == False:
-			while self.step['x'] <= self.x_steps and self.abort == False:
+		print self.x_steps, self.y_steps
+		if 'M' in self.meas_par['mtype'] or 's' in self.meas_par['mtype']:
+			self.runClosedLoopMap()
+		elif 'm' in self.meas_par['mtype']:
+			self.runOpenLoopMap()
+
+		self.mover.moveTo('x',self.meas_par['xf'])
+		self.mover.moveTo('y',self.meas_par['yf'])
+		self.mover.close()
+		self.measurer.close()
+		self.finished.emit()
+
+	def runClosedLoopMap(self):
+		for j, y_step in enumerate(self.y_steplist):
+			self.mover.moveTo('y',y_step)
+			for i, x_step in enumerate(self.x_steplist):
+				self.mover.moveTo('x',x_step)
 				self.pos = self.mover.getPos()
 				self.meas = self.measurer.getMeasurement()
-				self.dataset.append([self.pos['x'],self.pos['y'],self.step['x'],self.step['y'],self.meas])
+				self.dataset.append([self.pos['x'],self.pos['y'],i,j,self.meas])
+				print self.dataset[-1]
 				self.newdata.emit(self.dataset[-1])
-				if (self.x_steps == float('inf') and self.xgoesup and self.pos['x'] > self.meas_par['xt']) or (
-				   self.x_steps == float('inf') and not self.xgoesup and self.pos['x'] < self.meas_par['xt']):
-					self.x_steps = self.step['x']
-					break
-				self.step['x']+=1
-				if self.step['x']>=self.x_steps:
-					break
-				if 'M' in self.meas_par['mtype']:
-					self.mover.moveTo('x',self.x_steplist[self.step['x']])
-				else:
-					if self.xgoesup: #if xto > xfrom:
-						self.mover.moveUp('x')
-					else:
-						self.mover.moveDown('x')
+				if self.abort == True:
+					self.aborted.emit()
+					return
 			if self.abort == True:
 				self.aborted.emit()
 				return	
+
+	def runOpenLoopMap(self):
+		self.step = {'x':0,'y':0}
+		while True:
+			while True:
+				self.pos = self.mover.getPos()
+				if (self.x_steps == float('inf') and self.xgoesup and self.pos['x'] > self.meas_par['xt']) or (
+				   self.x_steps == float('inf') and not self.xgoesup and self.pos['x'] < self.meas_par['xt']):
+					self.x_steps = self.step['x']
+					self.xSteps.emit(int(self.x_steps)+1)
+					print self.x_steps
+				self.meas = self.measurer.getMeasurement()
+				self.dataset.append([self.pos['x'],self.pos['y'],self.step['x'],self.step['y'],self.meas])
+				self.newdata.emit(self.dataset[-1])
+				print self.dataset[-1]
+				if self.step['x'] >= self.x_steps:
+					print 'skipping on at',self.step['x']
+					break
+				self.step['x'] += 1
+				if self.xgoesup: #if xto > xfrom:
+					self.mover.moveUp('x')
+				else:
+					self.mover.moveDown('x')
+				if self.abort == True:
+					self.aborted.emit()
+					return
 
 			self.step['x']=0
 			if (self.y_steps == float('inf') and self.ygoesup and self.pos['y'] > self.meas_par['yt']) or (
@@ -619,25 +684,14 @@ class MapperDrone(QtCore.QObject):
 
 			self.mover.moveTo('x',self.meas_par['xf'])
 			self.step['y']+=1
-			if self.step['y']>=self.y_steps:
-				break
-			if 'M' in self.meas_par['mtype']:
-				self.mover.moveTo('y',self.x_steplist[self.step['y']])
+			if self.ygoesup: #if xto > xfrom:
+				self.mover.moveUp('y')
 			else:
-				if self.ygoesup: #if xto > xfrom:
-					self.mover.moveUp('y')
-				else:
-					self.mover.moveDown('y')
+				self.mover.moveDown('y')
 
-		if self.abort == True:
-			self.aborted.emit()
-			return	
-		else:
-			self.mover.moveTo('y',self.meas_par['yf'])
-			print 'done'
-			self.mover.close()
-			self.measurer.close()
-			self.finished.emit()
+			if self.abort == True:
+				self.aborted.emit()
+				return
 
 	def init(self):
 		#perform setup of devices
@@ -652,20 +706,26 @@ class MapperDrone(QtCore.QObject):
 			self.mover.setClosedCircuitDefaults(1000,self.meas_par['vr'])
 			self.x_steps = self.meas_par['n']+1
 			self.y_steps = self.meas_par['n']+1
+			self.xSteps.emit(int(self.x_steps))
 			self.x_steplist = np.linspace(self.meas_par['xf'],self.meas_par['xt'],self.x_steps)
 			self.y_steplist = np.linspace(self.meas_par['yf'],self.meas_par['yt'],self.y_steps)
 		elif 's' in self.meas_par['mtype']:
 			self.mover.setDefaults(	self.meas_par['xv'],
 									self.meas_par['yv'])
-			self.x_steps = abs(self.meas_par['xt']-self.meas_par['xf'])/self.meas_par['xv']
-			self.y_steps = abs(self.meas_par['yt']-self.meas_par['yf'])/self.meas_par['yv']
-
+			self.x_steps = (abs(self.meas_par['xt']-self.meas_par['xf'])/self.meas_par['xv'])+1
+			self.y_steps = (abs(self.meas_par['yt']-self.meas_par['yf'])/self.meas_par['yv'])+1
+			self.x_steplist = np.linspace(self.meas_par['xf'],self.meas_par['xt'],self.x_steps)
+			self.y_steplist = np.linspace(self.meas_par['yf'],self.meas_par['yt'],self.y_steps)
+			self.xSteps.emit(int(self.x_steps))
+			print self.x_steplist
+			print self.y_steplist
 		if 'r' in self.meas_par['mtype']:
 			self.measurer.setDefaults(	self.meas_par['tm'],
 										self.meas_par['tp'])
 		elif 'c' in self.meas_par['mtype']:
 			self.measurer.setDefaults(	self.meas_par['tm'],
 										self.meas_par['tp'])
+		
 
 
 def main():
