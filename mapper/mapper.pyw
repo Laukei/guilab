@@ -11,7 +11,7 @@ import numpy as np
 from PySide import QtGui, QtCore, QtWebKit
 
 #import json
-#import time
+import time
 #import csv
 #import os
 
@@ -539,9 +539,10 @@ class MapperProg(QtGui.QMainWindow):
 		# http://stackoverflow.com/questions/17835302/how-to-update-matplotlibs-imshow-window-interactively
 		# "much faster to use object's 'set_data' method" <-- use this instead of new imshow for efficiency
 		#
+		self.start_time = time.time()
 		self.data_array = np.array(self.data).transpose()
-		self.fig.clear()
-		self.ax.clear()
+		#self.fig.clear()
+		#self.ax.clear()
 		self.extent = [self.data_array[0].min(), self.data_array[0].max(), self.data_array[1].min(),self.data_array[1].max()]
 		if self.x_steps != None:
 			self.z_data = [list(self.data_array[4][x:x+self.x_steps]) for x in range(0,len(self.data_array[4]),self.x_steps)]
@@ -557,11 +558,19 @@ class MapperProg(QtGui.QMainWindow):
 			self.extent[3] = self.extent[2]*1.01
 		if self.extent[0] == self.extent[1]:
 			self.extent[1] = self.extent[0]*1.01
+		print 'midpoint:',time.time()-self.start_time
 
 		self.z_data = self.z_data[::-1]
-		plt.imshow(self.z_data,extent=self.extent, interpolation='nearest',cmap=colormaps.viridis, aspect='auto')
-		self.cbar = plt.colorbar()
+		try:
+			self.img.set_data(self.z_data)
+			self.img.autoscale()
+			self.img.set_extent(self.extent)
+		except AttributeError:
+			self.img = plt.imshow(self.z_data,extent=self.extent, interpolation='nearest',cmap=colormaps.viridis, aspect='auto')
+			self.cbar = plt.colorbar()
+
 		self.canvas.draw()
+		print 'took',time.time()-self.start_time,'s to do the maths'
 
 	def checkForGraph(self):
 		try:
