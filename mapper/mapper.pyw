@@ -534,6 +534,11 @@ class MapperProg(QtGui.QMainWindow):
 		self.canvas.draw()
 
 	def updatePreviewGrid(self):
+		#
+		# NOTE TO SELF:
+		# http://stackoverflow.com/questions/17835302/how-to-update-matplotlibs-imshow-window-interactively
+		# "much faster to use object's 'set_data' method" <-- use this instead of new imshow for efficiency
+		#
 		self.data_array = np.array(self.data).transpose()
 		self.fig.clear()
 		self.ax.clear()
@@ -546,7 +551,12 @@ class MapperProg(QtGui.QMainWindow):
 			if self.y_steps != None and len(self.z_data) < self.y_steps:
 				self.z_data += [[np.nan]*self.x_steps]*(self.y_steps-len(self.z_data))
 				self.extent[3] = max([self.data_array[1].max(),self.meas_par['yt']])
-
+		else:
+			self.z_data = [list(self.data_array[4])]
+		if self.extent[2] == self.extent[3]:
+			self.extent[3] = self.extent[2]*1.01
+		if self.extent[0] == self.extent[1]:
+			self.extent[1] = self.extent[0]*1.01
 
 		self.z_data = self.z_data[::-1]
 		plt.imshow(self.z_data,extent=self.extent, interpolation='nearest',cmap=colormaps.viridis, aspect='auto')
