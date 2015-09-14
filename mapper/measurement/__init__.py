@@ -5,11 +5,13 @@
 import time
 import random
 
-def findClass(key):
+def findClass(key=None):
 	index = {
 			'fakecounter':FakeCounter,
 			'fakereflec':FakeLockIn,
 			 }
+	if key == None:
+		return index
 	return index[key]
 
 class Measurer:
@@ -36,6 +38,7 @@ class FakeLockIn(Measurer):
 		time.sleep(self.pausetime)
 		time.sleep(self.meastime)
 		return random.gauss(-0.8,0.1)
+
 
 class FakeCounter(Measurer):
 	def setDefaults(self,meastime,pausetime):

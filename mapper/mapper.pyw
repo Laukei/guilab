@@ -10,8 +10,8 @@ import numpy as np
 #import math
 from PySide import QtGui, QtCore, QtWebKit
 
-#import json
-import time
+import json
+#import time
 #import csv
 #import os
 
@@ -22,13 +22,53 @@ import measurement
 from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
-
+settings_file = 'settings.json'
 
 def getSettings():
-	return {'scannertype':'fakescanner',
-			'motortype':'fakemotor',
-			'countertype':'fakecounter',
-			'reflectype':'fakereflec'}
+	try:
+		with open(settings_file,'r') as f:
+			settings = json.loads(f.read())
+	except IOError:
+		settings = defaultSettings()
+	return settings
+
+def defaultSettings():
+	return {'CORE':{
+				'scannertype':'fakescanner',
+				'motortype':'fakemotor',
+				'countertype':'fakecounter',
+				'reflectype':'fakereflec'
+				},
+			'SIM':{
+				'sim900addr':'ASRL1',
+				'vsourcemod':2,
+				'tsourcemod':1,
+				'vmeasmod':7,
+				'vsourceinput':1,
+				'vmeasinput':2,
+				'tinput':3},
+			'EXPORT':{
+					'title':True,
+					'verbose':False,
+					'manual_axes':False,
+					'xmax':None,
+					'xmin':None,
+					'ymax':None,
+					'ymin':None,
+					'width':8,
+					'height':6,
+					'unit':'in',
+					'dpi':150},
+			'targetfolder':''
+			}
+
+def setSettings(settings):
+	try:
+		with open(settings_file,'w') as f:
+			f.write(json.dumps(settings))
+			return True
+	except IOError:
+		return False
 
 class MapperProg(QtGui.QMainWindow):
 	def __init__(self):
@@ -109,10 +149,6 @@ class MapperProg(QtGui.QMainWindow):
 		settingsAction.setStatusTip('Edit device settings')
 		settingsAction.triggered.connect(self.openSettings)
 
-		plotSettingsAction = QtGui.QAction(QtGui.QIcon(r'icons\plotsettings.png'),'&Plot settings',self)
-		plotSettingsAction.setStatusTip('Edit settings for plotter')
-		plotSettingsAction.triggered.connect(self.openPlotSettings)
-
 		helpAction = QtGui.QAction(QtGui.QIcon(r'icons\help.png'),'&View help',self)
 		helpAction.setStatusTip('View help file')
 		helpAction.triggered.connect(self.helpFile)
@@ -134,7 +170,6 @@ class MapperProg(QtGui.QMainWindow):
 		fileMenu.addAction(exitAction)
 		settingsMenu = menubar.addMenu('&Settings')
 		settingsMenu.addAction(settingsAction)
-		settingsMenu.addAction(plotSettingsAction)
 		helpMenu = menubar.addMenu('&Help')
 		helpMenu.addAction(helpAction)
 		helpMenu.addSeparator()
@@ -469,17 +504,17 @@ class MapperProg(QtGui.QMainWindow):
 							return
 		#connect to instrumentation and pass handles through
 		if 'm' in self.meas_par['mtype'] or 'M' in self.meas_par['mtype']:
-			self.meas_par['mover'] = movement.findClass(self.settings['motortype'])()
+			self.meas_par['mover'] = movement.findClass(self.settings['CORE']['motortype'])()
 
 		elif 's' in self.meas_par['mtype']:
-			self.meas_par['mover'] = movement.findClass(self.settings['scannertype'])()
+			self.meas_par['mover'] = movement.findClass(self.settings['CORE']['scannertype'])()
 
 		
 		if 'r' in self.meas_par['mtype']:
-			self.meas_par['measurer'] = measurement.findClass(self.settings['reflectype'])()
+			self.meas_par['measurer'] = measurement.findClass(self.settings['CORE']['reflectype'])()
 
 		elif 'c' in self.meas_par['mtype']:
-			self.meas_par['measurer'] = measurement.findClass(self.settings['countertype'])()
+			self.meas_par['measurer'] = measurement.findClass(self.settings['CORE']['countertype'])()
 
 		#then launch the process and pass the values
 		#print 'launching in separate thread...',
@@ -545,7 +580,6 @@ class MapperProg(QtGui.QMainWindow):
 		# http://stackoverflow.com/questions/17835302/how-to-update-matplotlibs-imshow-window-interactively
 		# "much faster to use object's 'set_data' method" <-- use this instead of new imshow for efficiency
 		#
-		self.start_time = time.time()
 		self.data_array = np.array(self.data).transpose()
 		
 		self.extent = [self.data_array[0].min(), self.data_array[0].max(), self.data_array[1].min(),self.data_array[1].max()]
@@ -561,12 +595,10 @@ class MapperProg(QtGui.QMainWindow):
 				self.extent[2] = min([self.data_array[1].min(),self.meas_par['yt'],self.meas_par['yf']])
 		else:
 			self.z_data = [list(self.data_array[4])]
-		print self.extent
 		if self.extent[2] == self.extent[3]:
 			self.extent[3] += 0.000001
 		if self.extent[0] == self.extent[1]:
 			self.extent[1] += 0.000001
-		print self.z_data
 
 		#correct for swapped .extents()
 		if not self.x_forward:
@@ -583,7 +615,6 @@ class MapperProg(QtGui.QMainWindow):
 			self.cbar = plt.colorbar()
 
 		self.canvas.draw()
-		print 'took',time.time()-self.start_time,'s to do the maths'
 
 
 	def checkForGraph(self):
@@ -630,16 +661,18 @@ class MapperProg(QtGui.QMainWindow):
 		pass
 
 	def openSettings(self):
-		pass
+		self.settings_window = SettingsDialog(self.settings,movement.findClass(),measurement.findClass())
+		self.settings_window.exec_()
 
-	def openPlotSettings(self):
-		pass
 
 	def helpFile(self):
 		pass
 
 	def aboutProgram(self):
 		pass
+
+	def closeEvent(self,event):
+		setSettings(self.settings)
 
 
 class MapperDrone(QtCore.QObject):
@@ -766,6 +799,209 @@ class MapperDrone(QtCore.QObject):
 			self.measurer.setDefaults(	self.meas_par['tm'],
 										self.meas_par['tp'])
 		
+class SettingsDialog(QtGui.QDialog):
+	def __init__(self,settings,movers,measurers):
+		super(SettingsDialog,self).__init__()
+		self.settings = settings
+		self.movers = movers
+		self.measurers = measurers
+		self.associations = {
+			'a':{
+				't':'Mapper',
+				'w': QtGui.QFormLayout(),
+				'v':'CORE',
+				'c': {
+					'a':{
+						't':'Scanner controller:',
+						'w': QtGui.QComboBox(),
+						'p': self.movers,
+						'v':'scannertype'
+						},
+					'b':{
+						't':'Motor controller:',
+						'w': QtGui.QComboBox(),
+						'p': self.movers,
+						'v':'motortype'
+						},
+					'c':{
+						't':'Counter:',
+						'w': QtGui.QComboBox(),
+						'p': self.measurers,
+						'v':'countertype'
+						},
+					'd':{
+						't':'Reflection:',
+						'w': QtGui.QComboBox(),
+						'p': self.measurers,
+						'v':'reflectype'
+						}	
+					}
+				},
+			'b':{
+				't':'SIM900',
+				'w':QtGui.QFormLayout(),
+				'v':'SIM',
+				'c':{
+					'a':{
+						't':'SIM900 address:',
+						'w':QtGui.QLineEdit(),
+						'v':'sim900addr'
+						},
+					'b':{
+						't':'SIM928 voltage source module:',
+						'w':QtGui.QSpinBox(),
+						'v':'vsourcemod'
+						},
+					'c':{
+						't':'SIM922 temperature module:',
+						'w':QtGui.QSpinBox(),
+						'v':'tsourcemod'
+						},
+					'd':{
+						't':'SIM922 sensor channel:',
+						'w':QtGui.QSpinBox(),
+						'v':'tinput'
+						}
+					}
+				},
+			'c':{
+				't':'Export',
+				'w':QtGui.QFormLayout(),
+				'v':'EXPORT',
+				'c':{
+					'a':{
+						't':'Add title',
+						'w':QtGui.QCheckBox(),
+						'v':'title'
+						},
+					'b':{
+						't':'Verbose graph',
+						'w':QtGui.QCheckBox(),
+						'v':'verbose'
+						},
+					'c':{
+						't':'Manually-defined axis limits',
+						'w':QtGui.QCheckBox(),
+						'v':'manual_axes'
+						},
+					'd':{
+						't':'Xmax',
+						'w':QtGui.QDoubleSpinBox(),
+						'v':'xmax'
+						},
+					'e':{
+						't':'Xmin',
+						'w':QtGui.QDoubleSpinBox(),
+						'v':'xmin'
+						},
+					'f':{
+						't':'Ymax',
+						'w':QtGui.QDoubleSpinBox(),
+						'v':'ymax'
+						},
+					'g':{
+						't':'Ymin',
+						'w':QtGui.QDoubleSpinBox(),
+						'v':'ymin'
+						},
+					'h':{
+						't':'Width',
+						'w':QtGui.QDoubleSpinBox(),
+						'v':'width'
+						},
+					'i':{
+						't':'Height',
+						'w':QtGui.QDoubleSpinBox(),
+						'v':'height'
+						},
+					'j':{
+						't':'Units',
+						'w':QtGui.QComboBox(),
+						'v':'unit',
+						'p': ['in','cm','px']
+						},
+					'k':{
+						't':'Plot DPI',
+						'w':QtGui.QSpinBox(),
+						'v':'dpi'
+						}
+					}
+				}
+			}
+
+		self.initUI()
+
+	def initUI(self):
+		self.createLayoutsAndWidgets()
+		self.populateLayoutsAndSetDefaults()
+		self.setWindowTitle('Settings')
+
+	def createLayoutsAndWidgets(self):
+		self.tab_widget = QtGui.QTabWidget()
+		self.button_box = QtGui.QDialogButtonBox(QtGui.QDialogButtonBox.Ok | QtGui.QDialogButtonBox.Cancel)
+
+		self.button_box.accepted.connect(self.packageSettings)
+		self.button_box.accepted.connect(self.accept)
+		self.button_box.rejected.connect(self.reject)
+
+		self.main_layout = QtGui.QVBoxLayout()
+		self.main_layout.addWidget(self.tab_widget)
+		self.main_layout.addWidget(self.button_box)
+		self.setLayout(self.main_layout)
+
+	def populateLayoutsAndSetDefaults(self):
+		for tabkey in sorted(self.associations.keys()):
+			self.tabtier = self.associations[tabkey]
+			self.intermediary_widget = QtGui.QWidget()
+			self.intermediary_widget.setLayout(self.tabtier['w'])
+			self.tab_widget.addTab(self.intermediary_widget,self.tabtier['t'])
+			for childkey in sorted(self.tabtier['c'].keys()):
+				self.childtier = self.tabtier['c'][childkey]
+				self.tabtier['w'].addRow(self.childtier['t'], self.childtier['w'])
+				if isinstance(self.childtier['w'],QtGui.QComboBox):
+					if type(self.childtier['p']) == list:
+						for item in self.childtier['p']:
+							self.childtier['w'].addItem(item)
+						self.childtier['w'].setCurrentIndex(self.childtier['p'].index(self.settings[self.tabtier['v']][self.childtier['v']]))
+					elif type(self.childtier['p']) == dict:
+						for i, item in enumerate(sorted(self.childtier['p'].keys())):
+							self.childtier['w'].addItem(self.childtier['p'][item].__name__)
+							if item == self.settings[self.tabtier['v']][self.childtier['v']]:
+								self.index = i 
+						self.childtier['w'].setCurrentIndex(self.index)
+				elif isinstance(self.childtier['w'],QtGui.QCheckBox):
+					self.childtier['w'].setChecked(self.settings[self.tabtier['v']][self.childtier['v']])
+				elif isinstance(self.childtier['w'],QtGui.QLineEdit):
+					self.childtier['w'].setText(str(self.settings[self.tabtier['v']][self.childtier['v']]))
+				elif isinstance(self.childtier['w'],QtGui.QSpinBox) or isinstance(self.childtier['w'],QtGui.QDoubleSpinBox):
+					self.childtier['w'].setMaximum(1000)
+					if self.settings[self.tabtier['v']][self.childtier['v']] != None:
+						self.childtier['w'].setValue(self.settings[self.tabtier['v']][self.childtier['v']])
+					else:
+						self.childtier['w'].setSpecialValueText('None')
+
+	def packageSettings(self):
+		for tabkey in sorted(self.associations.keys()):
+			self.tabtier = self.associations[tabkey]
+			for childkey in sorted(self.tabtier['c'].keys()):
+				self.childtier = self.tabtier['c'][childkey]
+				if isinstance(self.childtier['w'],QtGui.QComboBox):
+					if type(self.childtier['p']) == list:
+						self.settings[self.tabtier['v']][self.childtier['v']] = self.childtier['w'].currentText()
+					elif type(self.childtier['p']) == dict:
+						for i, item in enumerate(sorted(self.childtier['p'].keys())):
+							if self.childtier['p'][item].__name__ == self.childtier['w'].currentText():
+								self.settings[self.tabtier['v']][self.childtier['v']] = item
+				elif isinstance(self.childtier['w'],QtGui.QCheckBox):
+					self.settings[self.tabtier['v']][self.childtier['v']] = self.childtier['w'].isChecked()
+				elif isinstance(self.childtier['w'],QtGui.QLineEdit):
+					self.settings[self.tabtier['v']][self.childtier['v']] = self.childtier['w'].text()
+				elif isinstance(self.childtier['w'],QtGui.QSpinBox) or isinstance(self.childtier['w'],QtGui.QDoubleSpinBox):
+					if self.childtier['w'].value() != 0:
+						self.settings[self.tabtier['v']][self.childtier['v']] = self.childtier['w'].value()
+					else:
+						self.settings[self.tabtier['v']][self.childtier['v']] = None
+
 
 
 def main():

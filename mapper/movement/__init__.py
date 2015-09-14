@@ -14,11 +14,13 @@ except:
 import time
 import random
 
-def findClass(key):
+def findClass(key=None):
 	index = {
 			'fakescanner':FakeScanner,
 			'fakemotor':FakeMotor,
 			 }
+	if key == None:
+		return index
 	return index[key]
 
 class Mover:
