@@ -11,13 +11,14 @@ import numpy as np
 from PySide import QtGui, QtCore, QtWebKit
 
 import json
-#import time
+import time
 #import csv
 #import os
 
 import colormaps
 import movement
 import measurement
+from sim900.fake import Sim900
 
 from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -124,16 +125,16 @@ class MapperProg(QtGui.QMainWindow):
 		saveAsAction.setStatusTip('Save as')
 		saveAsAction.triggered.connect(self.saveAs)
 
-		acquireAction = QtGui.QAction(QtGui.QIcon(r'icons\acquire.png'),'&Run',self)
-		acquireAction.setShortcut('Ctrl+R')
-		acquireAction.setStatusTip('Run scan (Ctrl+R)')
-		acquireAction.triggered.connect(self.acquire)
+		self.acquireAction = QtGui.QAction(QtGui.QIcon(r'icons\acquire.png'),'&Run',self)
+		self.acquireAction.setShortcut('Ctrl+R')
+		self.acquireAction.setStatusTip('Run scan (Ctrl+R)')
+		self.acquireAction.triggered.connect(self.acquire)
 
-		haltAction = QtGui.QAction(QtGui.QIcon(r'icons\abort.png'),'&Halt acquisition',self)
-		haltAction.setShortcut('Ctrl+H')
-		haltAction.setStatusTip('Halt acquisition (Ctrl+H)')
-		haltAction.triggered.connect(self.halt)
-		haltAction.setEnabled(False)
+		self.haltAction = QtGui.QAction(QtGui.QIcon(r'icons\abort.png'),'&Halt acquisition',self)
+		self.haltAction.setShortcut('Ctrl+H')
+		self.haltAction.setStatusTip('Halt acquisition (Ctrl+H)')
+		self.haltAction.triggered.connect(self.halt)
+		self.haltAction.setEnabled(False)
 
 		plotAction = QtGui.QAction(QtGui.QIcon(r'icons\plot.png'),'&Plot',self)
 		plotAction.setShortcut('Ctrl+P')
@@ -177,8 +178,8 @@ class MapperProg(QtGui.QMainWindow):
 		
 		self.toolbar = self.addToolBar('Operations')
 		self.toolbar.setMovable(False)
-		self.toolbar.addAction(acquireAction)
-		self.toolbar.addAction(haltAction)
+		self.toolbar.addAction(self.acquireAction)
+		self.toolbar.addAction(self.haltAction)
 		self.toolbar.addSeparator()
 		self.toolbar.addAction(plotAction)
 		self.toolbar.addAction(exportAction)
@@ -516,6 +517,22 @@ class MapperProg(QtGui.QMainWindow):
 		elif 'c' in self.meas_par['mtype']:
 			self.meas_par['measurer'] = measurement.findClass(self.settings['CORE']['countertype'])()
 
+		#perform final metadata stuff
+		if not self.manualtemp.isChecked() or not self.manualbias.isChecked():
+			self.sim900 = Sim900(self.settings['SIM']['sim900addr'])
+			self.sim900check = self.sim900.check()
+			if type(self.sim900check) != str:
+				self.sim900 = Sim900(self.settings['SIM']['sim900addr'])
+				if not self.manualtemp.isChecked():
+					self.temp.setText(str(self.sim900.query(self.settings['SIM']['tsourcemod'],'TVAL? '+str(self.settings['SIM']['tinput'])+',1')))
+				if not self.manualbias.isChecked():
+					self.bias.setText(str(self.sim900.query(self.settings['SIM']['vsourcemod'],'VOLT? '+str(self.settings['SIM']['vsourceinput'])+',1')))
+				self.sim900.close()
+
+		self.dateandtime.setText(time.asctime())
+		self.haltAction.setEnabled(True)
+		self.acquireAction.setEnabled(False)
+
 		#then launch the process and pass the values
 		#print 'launching in separate thread...',
 		self.x_forward = True
@@ -531,7 +548,6 @@ class MapperProg(QtGui.QMainWindow):
 		self.mapper_drone.newdata.connect(self.getData)
 		self.mapper_drone.finished.connect(self.obj_thread.quit)
 		self.mapper_drone.finished.connect(self.acquisitionFinished)
-		self.mapper_drone.aborted.connect(self.resetPbar)
 		self.mapper_drone.xSteps.connect(self.getXSteps)
 		self.mapper_drone.ySteps.connect(self.getYSteps)
 		self.x_steps = None
@@ -631,10 +647,8 @@ class MapperProg(QtGui.QMainWindow):
 			self.fig.tight_layout()
 
 	def acquisitionFinished(self):
-		pass
-
-	def resetPbar(self):
-		pass
+		self.haltAction.setEnabled(False)
+		self.acquireAction.setEnabled(True)
 
 	def new(self):
 		pass
@@ -652,7 +666,9 @@ class MapperProg(QtGui.QMainWindow):
 		pass
 
 	def halt(self):
-		pass
+		self.haltAction.setEnabled(False)
+		self.acquireAction.setEnabled(True)
+		self.mapper_drone.abort = True
 
 	def plotExternal(self):
 		pass
