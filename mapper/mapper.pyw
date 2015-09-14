@@ -483,6 +483,12 @@ class MapperProg(QtGui.QMainWindow):
 
 		#then launch the process and pass the values
 		#print 'launching in separate thread...',
+		self.x_forward = True
+		self.y_forward = True
+		if self.meas_par['xf']>self.meas_par['xt']:
+			self.x_forward = False
+		if self.meas_par['yf']>self.meas_par['yt']:
+			self.y_forward = False
 		self.obj_thread = QtCore.QThread()
 		self.mapper_drone = MapperDrone(self.meas_par)
 		self.mapper_drone.moveToThread(self.obj_thread)
@@ -541,26 +547,33 @@ class MapperProg(QtGui.QMainWindow):
 		#
 		self.start_time = time.time()
 		self.data_array = np.array(self.data).transpose()
-		#self.fig.clear()
-		#self.ax.clear()
+		
 		self.extent = [self.data_array[0].min(), self.data_array[0].max(), self.data_array[1].min(),self.data_array[1].max()]
 		if self.x_steps != None:
 			self.z_data = [list(self.data_array[4][x:x+self.x_steps]) for x in range(0,len(self.data_array[4]),self.x_steps)]
 			if len(self.z_data[-1]) < self.x_steps:
 				self.z_data[-1] += [np.nan]*(self.x_steps - len(self.z_data[-1]))
-			self.extent[1] = max([self.data_array[0].max(),self.meas_par['xt']])
+			self.extent[1] = max([self.data_array[0].max(),self.meas_par['xt'],self.meas_par['xf']])
+			self.extent[0] = min([self.data_array[0].min(),self.meas_par['xt'],self.meas_par['xf']])
 			if self.y_steps != None and len(self.z_data) < self.y_steps:
 				self.z_data += [[np.nan]*self.x_steps]*(self.y_steps-len(self.z_data))
-				self.extent[3] = max([self.data_array[1].max(),self.meas_par['yt']])
+				self.extent[3] = max([self.data_array[1].max(),self.meas_par['yt'],self.meas_par['yf']])
+				self.extent[2] = min([self.data_array[1].min(),self.meas_par['yt'],self.meas_par['yf']])
 		else:
 			self.z_data = [list(self.data_array[4])]
+		print self.extent
 		if self.extent[2] == self.extent[3]:
-			self.extent[3] = self.extent[2]*1.01
+			self.extent[3] += 0.000001
 		if self.extent[0] == self.extent[1]:
-			self.extent[1] = self.extent[0]*1.01
-		print 'midpoint:',time.time()-self.start_time
+			self.extent[1] += 0.000001
+		print self.z_data
 
-		self.z_data = self.z_data[::-1]
+		#correct for swapped .extents()
+		if not self.x_forward:
+			for r, row in enumerate(self.z_data):
+				self.z_data[r] = row[::-1]
+		if self.y_forward:
+			self.z_data = self.z_data[::-1]
 		try:
 			self.img.set_data(self.z_data)
 			self.img.autoscale()
@@ -571,6 +584,7 @@ class MapperProg(QtGui.QMainWindow):
 
 		self.canvas.draw()
 		print 'took',time.time()-self.start_time,'s to do the maths'
+
 
 	def checkForGraph(self):
 		try:
