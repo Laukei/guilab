@@ -60,6 +60,27 @@ def defaultSettings():
 					'height':6,
 					'unit':'in',
 					'dpi':150},
+			'DEFAULTS':{
+					'xfrom_m': None,
+					'xto_m': None,
+					'yfrom_m': None,
+					'yto_m': None,
+					'volt_m': 40,
+					'freq_m': 100,
+					'readv_m': 1,
+					'clicks_m': 10,
+					'closedloop_m': False,
+					'numpoints_m': 20,
+					'xfrom_s': 0,
+					'xto_s': 10,
+					'yfrom_s': 0,
+					'yto_s': 10,
+					'xvoltstep_s': 1,
+					'yvoltstep_s': 1,
+					'meastime_c': 0.7,
+					'pausetime_c': 0.2,
+					'meastime_r': 0.05,
+					'pausetime_r': 0.05},
 			'targetfolder':''
 			}
 
@@ -84,9 +105,8 @@ class MapperProg(QtGui.QMainWindow):
 		self.populateLayouts()
 
 		#finalize things
-
-		self.setDefaults()
 		self.settings = getSettings()
+		self.setDefaults()
 		self.name_of_application = 'Mapper'
 		#self.resize(800,500)
 		self.setWindowTitle(self.name_of_application + '[*]')
@@ -385,26 +405,26 @@ class MapperProg(QtGui.QMainWindow):
 								'pausetime_r':self.pausetime_r}
 
 	def setDefaults(self):
-		self.key_object_map['xfrom_m'].setText('')
-		self.key_object_map['xto_m'].setText('')
-		self.key_object_map['yfrom_m'].setText('')
-		self.key_object_map['yto_m'].setText('')
-		self.key_object_map['volt_m'].setText('40')
-		self.key_object_map['freq_m'].setText('100')
-		self.key_object_map['readv_m'].setText('1')
-		self.key_object_map['clicks_m'].setText('10')
-		self.key_object_map['closedloop_m'].setChecked(False)
-		self.key_object_map['numpoints_m'].setText('20')
-		self.key_object_map['xfrom_s'].setText('0')
-		self.key_object_map['xto_s'].setText('10')
-		self.key_object_map['yfrom_s'].setText('0')
-		self.key_object_map['yto_s'].setText('10')
-		self.key_object_map['xvoltstep_s'].setText('1')
-		self.key_object_map['yvoltstep_s'].setText('1')
-		self.key_object_map['meastime_c'].setText('0.7')
-		self.key_object_map['pausetime_c'].setText('0.2')
-		self.key_object_map['meastime_r'].setText('0.05')
-		self.key_object_map['pausetime_r'].setText('0.05')
+		self.key_object_map['xfrom_m'].setText(str(self.settings['DEFAULTS']['xfrom_m']))
+		self.key_object_map['xto_m'].setText(str(self.settings['DEFAULTS']['xto_m']))
+		self.key_object_map['yfrom_m'].setText(str(self.settings['DEFAULTS']['yfrom_m']))
+		self.key_object_map['yto_m'].setText(str(self.settings['DEFAULTS']['yto_m']))
+		self.key_object_map['volt_m'].setText(str(self.settings['DEFAULTS']['volt_m']))
+		self.key_object_map['freq_m'].setText(str(self.settings['DEFAULTS']['freq_m']))
+		self.key_object_map['readv_m'].setText(str(self.settings['DEFAULTS']['readv_m']))
+		self.key_object_map['clicks_m'].setText(str(self.settings['DEFAULTS']['clicks_m']))
+		self.key_object_map['closedloop_m'].setChecked(self.settings['DEFAULTS']['closedloop_m'])
+		self.key_object_map['numpoints_m'].setText(str(self.settings['DEFAULTS']['numpoints_m']))
+		self.key_object_map['xfrom_s'].setText(str(self.settings['DEFAULTS']['xfrom_s']))
+		self.key_object_map['xto_s'].setText(str(self.settings['DEFAULTS']['xto_s']))
+		self.key_object_map['yfrom_s'].setText(str(self.settings['DEFAULTS']['yfrom_s']))
+		self.key_object_map['yto_s'].setText(str(self.settings['DEFAULTS']['yto_s']))
+		self.key_object_map['xvoltstep_s'].setText(str(self.settings['DEFAULTS']['xvoltstep_s']))
+		self.key_object_map['yvoltstep_s'].setText(str(self.settings['DEFAULTS']['yvoltstep_s']))
+		self.key_object_map['meastime_c'].setText(str(self.settings['DEFAULTS']['meastime_c']))
+		self.key_object_map['pausetime_c'].setText(str(self.settings['DEFAULTS']['pausetime_c']))
+		self.key_object_map['meastime_r'].setText(str(self.settings['DEFAULTS']['meastime_r']))
+		self.key_object_map['pausetime_r'].setText(str(self.settings['DEFAULTS']['pausetime_r']))
 
 	def acquire(self):
 		#first: work out what measurement we're trying to run
@@ -532,6 +552,13 @@ class MapperProg(QtGui.QMainWindow):
 		self.mapper_drone.ySteps.connect(self.getYSteps)
 		self.x_steps = None
 		self.y_steps = None
+		if any(x in 'mM' for x in self.meas_par['mtype']):
+			self.ax.set_xlabel('X position (mm)')
+			self.ax.set_ylabel('Y position (mm)')
+		elif any(x in 's' for x in self.meas_par['mtype']):
+			self.ax.set_xlabel('X position (V)')
+			self.ax.set_ylabel('Y position (V)')
+
 		self.obj_thread.start()
 		#print 'launched'
 
@@ -609,7 +636,7 @@ class MapperProg(QtGui.QMainWindow):
 		except AttributeError:
 			self.img = plt.imshow(self.z_data,extent=self.extent, interpolation='nearest',cmap=colormaps.viridis, aspect='auto')
 			self.cbar = plt.colorbar()
-
+		self.fig.tight_layout()
 		self.canvas.draw()
 
 
@@ -621,8 +648,8 @@ class MapperProg(QtGui.QMainWindow):
 			self.fig = plt.figure(figsize = (4.5,4), dpi=72, facecolor=(1,1,1), edgecolor=(0,0,0))
 			self.ax = self.fig.add_subplot(1,1,1)
 			#self.plot = plt.tricontourf(self.data)#*self.data)
-			self.ax.set_ylabel('dunno')
-			self.ax.set_xlabel('nobody told me')
+			#self.ax.set_ylabel('dunno')
+			#self.ax.set_xlabel('nobody told me')
 			self.canvas = FigureCanvas(self.fig)
 			self.fig.tight_layout()
 
@@ -872,6 +899,127 @@ class SettingsDialog(QtGui.QDialog):
 					}
 				},
 			'c':{
+				't':'Motor',
+				'w':QtGui.QFormLayout(),
+				'v':'DEFAULTS',
+				'c':{
+					'a':{
+						't':'X from:',
+						'w':QtGui.QLineEdit(),
+						'v':'xfrom_m'
+						},
+					'b':{
+						't':'X to:',
+						'w':QtGui.QLineEdit(),
+						'v':'xto_m'
+						},
+					'c':{
+						't':'Y from:',
+						'w':QtGui.QLineEdit(),
+						'v':'yfrom_m'
+						},
+					'd':{
+						't':'Y to:',
+						'w':QtGui.QLineEdit(),
+						'v':'yto_m'
+						},
+					'e':{
+						't':'Move voltage:',
+						'w':QtGui.QSpinBox(),
+						'v':'volt_m'
+						},
+					'f':{
+						't':'Motor move frequency:',
+						'w':QtGui.QSpinBox(),
+						'v':'freq_m'
+						},
+					'h':{
+						't':'Read voltage:',
+						'w':QtGui.QDoubleSpinBox(),
+						'v':'readv_m'
+						},
+					'g':{
+						't':'Move clicks:',
+						'w':QtGui.QSpinBox(),
+						'v':'clicks_m'
+						},
+					'i':{
+						't':'Closed loop:',
+						'w':QtGui.QCheckBox(),
+						'v':'closedloop_m'
+						},
+					'j':{
+						't':'Closed loop points',
+						'w':QtGui.QSpinBox(),
+						'v':'numpoints_m'
+						}
+					}
+				},
+			'd':{
+				't':'Scanner',
+				'w':QtGui.QFormLayout(),
+				'v':'DEFAULTS',
+				'c':{
+					'k':{
+						't':'X from:',
+						'w':QtGui.QLineEdit(),
+						'v':'xfrom_s'
+						},
+					'l':{
+						't':'X to:',
+						'w':QtGui.QLineEdit(),
+						'v':'xto_s'
+						},
+					'm':{
+						't':'Y from:',
+						'w':QtGui.QLineEdit(),
+						'v':'yfrom_s'
+						},
+					'n':{
+						't':'Y to:',
+						'w':QtGui.QLineEdit(),
+						'v':'yto_s'
+						},
+					'o':{
+						't':'X voltage step:',
+						'w':QtGui.QDoubleSpinBox(),
+						'v':'xvoltstep_s'
+						},
+					'p':{
+						't':'Y voltage step:',
+						'w':QtGui.QDoubleSpinBox(),
+						'v':'yvoltstep_s'
+						}
+					}
+				},
+			'e':{
+				't':'Measurement',
+				'w':QtGui.QFormLayout(),
+				'v':'DEFAULTS',
+				'c':{
+					'q':{
+						't':'Counter measurement time:',
+						'w':QtGui.QLineEdit(),
+						'v':'meastime_c'
+						},
+					'r':{
+						't':'Counter pause time:',
+						'w':QtGui.QLineEdit(),
+						'v':'pausetime_c'
+						},
+					's':{
+						't':'Reflection measurement time:',
+						'w':QtGui.QLineEdit(),
+						'v':'meastime_r'
+						},
+					't':{
+						't':'Reflection pause time:',
+						'w':QtGui.QLineEdit(),
+						'v':'pausetime_r'
+						}
+					}
+				},
+			'f':{
 				't':'Export',
 				'w':QtGui.QFormLayout(),
 				'v':'EXPORT',
@@ -942,6 +1090,7 @@ class SettingsDialog(QtGui.QDialog):
 		self.createLayoutsAndWidgets()
 		self.populateLayoutsAndSetDefaults()
 		self.setWindowTitle('Settings')
+		self.resize(500,500)
 
 	def createLayoutsAndWidgets(self):
 		self.tab_widget = QtGui.QTabWidget()
