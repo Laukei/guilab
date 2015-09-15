@@ -59,7 +59,9 @@ def defaultSettings():
 					'width':8,
 					'height':6,
 					'unit':'in',
-					'dpi':150},
+					'dpi':150,
+					'plot_type':'Filled contour',
+					'show_datapoints':True},
 			'DEFAULTS':{
 					'xfrom_m': None,
 					'xto_m': None,
@@ -573,37 +575,7 @@ class MapperProg(QtGui.QMainWindow):
 	def getYSteps(self,y_steps):
 		self.y_steps = y_steps
 
-	def updatePreview(self):
-		self.data_array = np.array(self.data).transpose()
-		self.fig.clear()
-		self.ax.clear()
-		try:
-			self.contourf = plt.tricontourf(self.data_array[0],self.data_array[1],self.data_array[4],cmap=colormaps.viridis)
-		except RuntimeError:
-			pass
-		except ValueError:
-			pass
-
-		try:
-			self.cbar = plt.colorbar()
-		except RuntimeError:
-			pass
-
-		self.colordata = []
-		for value in [((x-min(self.data_array[4]))/(max(self.data_array[4]-min(self.data_array[4])))) for x in self.data_array[4]]:
-			self.colordata.append(colormaps.viridis(value))
-
-		for v, value in enumerate(self.data_array[0]):
-			self.plot = plt.plot([self.data_array[0][v]], [self.data_array[1][v]],'o',color=self.colordata[v],ms=10)
-
-		self.canvas.draw()
-
 	def updatePreviewGrid(self):
-		#
-		# NOTE TO SELF:
-		# http://stackoverflow.com/questions/17835302/how-to-update-matplotlibs-imshow-window-interactively
-		# "much faster to use object's 'set_data' method" <-- use this instead of new imshow for efficiency
-		#
 		plt.figure('preview')
 		self.data_array = np.array(self.data).transpose()
 
@@ -1075,58 +1047,69 @@ class SettingsDialog(QtGui.QDialog):
 				'v':'EXPORT',
 				'c':{
 					'a':{
-						't':'Add title',
+						't':'Add title:',
 						'w':QtGui.QCheckBox(),
 						'v':'title'
 						},
 					'b':{
-						't':'Verbose graph',
+						't':'Verbose graph:',
 						'w':QtGui.QCheckBox(),
 						'v':'verbose'
 						},
 					'c':{
-						't':'Manually-defined axis limits',
+						't':'Manually-defined axis limits:',
 						'w':QtGui.QCheckBox(),
 						'v':'manual_axes'
 						},
 					'd':{
-						't':'Xmax',
+						't':'Xmax:',
 						'w':QtGui.QDoubleSpinBox(),
 						'v':'xmax'
 						},
 					'e':{
-						't':'Xmin',
+						't':'Xmin:',
 						'w':QtGui.QDoubleSpinBox(),
 						'v':'xmin'
 						},
 					'f':{
-						't':'Ymax',
+						't':'Ymax:',
 						'w':QtGui.QDoubleSpinBox(),
 						'v':'ymax'
 						},
 					'g':{
-						't':'Ymin',
+						't':'Ymin:',
 						'w':QtGui.QDoubleSpinBox(),
 						'v':'ymin'
 						},
 					'h':{
-						't':'Width',
+						't':'Plot type:',
+						'w':QtGui.QComboBox(),
+						'v':'plot_type',
+						'p':['Contour','Filled contour','Grid']
+						},
+					'i':{
+						't':'Show datapoints on contours:',
+						'w':QtGui.QCheckBox(),
+						'v':'show_datapoints'
+						},
+					'w':{
+						't':'Figure width:',
 						'w':QtGui.QDoubleSpinBox(),
 						'v':'width'
 						},
-					'i':{
-						't':'Height',
+					'x':{
+						't':'Figure height:',
 						'w':QtGui.QDoubleSpinBox(),
 						'v':'height'
 						},
-					'j':{
-						't':'Units',
+					'y':{
+						't':'Width/height units:',
 						'w':QtGui.QComboBox(),
 						'v':'unit',
 						'p': ['in','cm','px']
 						},
-					'k':{
-						't':'Plot DPI',
+					'z':{
+						't':'Plot dots-per-inch (DPI):',
 						'w':QtGui.QSpinBox(),
 						'v':'dpi'
 						}
@@ -1237,12 +1220,13 @@ class MapperPlot(QtGui.QMainWindow):
 		self.setWindowIcon(QtGui.QIcon(r'icons\plot.png'))
 		self.showMaximized()
 		self.show()
-		self.updatePreviewGrid()
+		self.updatePreview()
 
 	def createLayoutAndWidgets(self):
 		self.give_title = QtGui.QCheckBox('Graph title')
 		self.title = QtGui.QLineEdit(self.autoTitle())
 		self.verbose_graph = QtGui.QCheckBox('Verbose graph')
+		self.plot_type = QtGui.QComboBox(self)
 		self.manual_limits = QtGui.QCheckBox('Manual axes')
 		self.x_max = QtGui.QLineEdit('')
 		self.x_min = QtGui.QLineEdit('')
@@ -1255,10 +1239,15 @@ class MapperPlot(QtGui.QMainWindow):
 		self.possible_units = ['in','cm','px']
 		for unit in self.possible_units:
 			self.exp_units.addItem(unit)
+		self.possible_plots = ['Contour','Filled contour','Grid']
+		for plot in self.possible_plots:
+			self.plot_type.addItem(plot)
+		self.show_datapoints = QtGui.QCheckBox('Show datapoints')
 
 		self.checkables = [ ['title',self.give_title],
 							['verbose',self.verbose_graph],
-							['manual_axes',self.manual_limits]]
+							['manual_axes',self.manual_limits],
+							['show_datapoints',self.show_datapoints]]
 
 		self.textables = [  ['ymax',self.y_max],
 							['ymin',self.y_min],
@@ -1272,7 +1261,7 @@ class MapperPlot(QtGui.QMainWindow):
 		self.closeButton = QtGui.QPushButton('Close')
 		self.exportButton = QtGui.QPushButton('Export')
 
-		self.manual_limits_widget = QtGui.QWidget()
+		self.manual_limits_widget = QtGui.QGroupBox()
 		self.manual_limits_widget.manual_grid = QtGui.QGridLayout()
 		self.manual_limits_widget.setLayout(self.manual_limits_widget.manual_grid)
 		self.manual_limits_widget.manual_grid.addWidget(QtGui.QLabel('X<sub>min</sub>'),0,0)
@@ -1285,7 +1274,7 @@ class MapperPlot(QtGui.QMainWindow):
 		self.manual_limits_widget.manual_grid.addWidget(self.y_max,1,3)
 		self.manual_limits_widget.setVisible(False)
 
-		self.title_widget = QtGui.QWidget()
+		self.title_widget = QtGui.QGroupBox()
 		self.title_widget.title_grid = QtGui.QGridLayout()
 		self.title_widget.setLayout(self.title_widget.title_grid)
 		self.title_widget.title_grid.addWidget(QtGui.QLabel('Title:'),0,0)
@@ -1311,6 +1300,7 @@ class MapperPlot(QtGui.QMainWindow):
 
 		self.gridsection1 = QtGui.QGridLayout()
 		self.gridsection2 = QtGui.QGridLayout()
+		self.gridsection3 = QtGui.QGridLayout()
 		#self.vbox = QtGui.QVBoxLayout()
 		self.hbox = QtGui.QHBoxLayout()
 
@@ -1322,13 +1312,24 @@ class MapperPlot(QtGui.QMainWindow):
 		self.bottombar.addWidget(self.resetButton)
 		self.bottombar.addWidget(self.closeButton)
 
-		self.gridsection2.addWidget(self.verbose_graph,3,0)
-		self.gridsection2.addWidget(self.manual_limits,4,0)
+		self.gridsection2.addWidget(self.verbose_graph,0,0)
+		self.gridsection2.addWidget(self.manual_limits,1,0)
+
+		self.gridsection3.addWidget(QtGui.QLabel('Plot type:'),0,0)
+		self.gridsection3.addWidget(self.plot_type,0,1)
+
+		self.sdp_widget = QtGui.QGroupBox('Contour settings')
+		self.sdp_widget.sdp_grid = QtGui.QGridLayout()
+		self.sdp_widget.setLayout(self.sdp_widget.sdp_grid)
+		self.sdp_widget.sdp_grid.addWidget(self.show_datapoints,0,0)
+		self.sdp_widget.setVisible(False)
 
 		self.panel_widget.vbox.addLayout(self.gridsection1)
 		self.panel_widget.vbox.addWidget(self.title_widget)
 		self.panel_widget.vbox.addLayout(self.gridsection2)
 		self.panel_widget.vbox.addWidget(self.manual_limits_widget)
+		self.panel_widget.vbox.addLayout(self.gridsection3)
+		self.panel_widget.vbox.addWidget(self.sdp_widget)
 		self.panel_widget.vbox.addWidget(self.export_widget)
 		self.panel_widget.vbox.addStretch(1)
 		self.panel_widget.vbox.addLayout(self.bottombar)
@@ -1357,6 +1358,9 @@ class MapperPlot(QtGui.QMainWindow):
 		self.title.textChanged.connect(self.updateGraph)
 		self.give_title.toggled.connect(self.updateGraph)
 		self.exp_units.activated.connect(self.updateGraph)
+		self.plot_type.activated.connect(self.updatePreview)
+		self.plot_type.activated.connect(self.plotTypeOptions)
+		self.show_datapoints.toggled.connect(self.updatePreview)
 		self.exp_width.textChanged.connect(self.updateGraph)
 		self.exp_height.textChanged.connect(self.updateGraph)
 		self.dpi.textChanged.connect(self.updateGraph)
@@ -1373,72 +1377,104 @@ class MapperPlot(QtGui.QMainWindow):
 			else:
 				value[1].setText(str(self.se[value[0]]))
 		self.exp_units.setCurrentIndex(self.possible_units.index(self.se['unit']))
+		self.plot_type.setCurrentIndex(self.possible_plots.index(self.se['plot_type']))
+		self.plotTypeOptions()
 
 	def autoTitle(self):
-		return 'Title!'		
+		self.titlestring = 'Map'
+		if self.pm['batchName'] != '' or self.pm['deviceId']!= '':
+			self.titlestring += ' of'
+			if self.pm['batchName'] != '':
+				self.titlestring += ' '+self.pm['batchName']
+			if self.pm['deviceId'] != '':
+				self.titlestring += ' '+self.pm['deviceId']
+		if self.pm['sma'] != '':
+			self.titlestring += ' SMA'+self.pm['sma']+' '
+		if self.pm['temp'] != '':
+			self.titlestring += 'at '+self.pm['temp']+'K '
+		if self.pm['temp'] != '':
+			self.titlestring += 'biased at '+self.pm['bias']+'V '
+		if self.pm['dateandtime'] != '' or self.pm['username'] != '':
+			self.titlestring += '\n'
+			if self.pm['username'] != '':
+				self.titlestring += 'Data taken by '+self.pm['username']
+			if self.pm['dateandtime'] != '':
+				self.titlestring += ' on '+self.pm['dateandtime']
+		return self.titlestring
+
+	def plotTypeOptions(self):
+		if self.plot_type.currentText() in ['Contour','Filled contour']:
+			self.sdp_widget.setVisible(True)
+		else:
+			self.sdp_widget.setVisible(False)
 
 	def updatePreview(self):
-		self.data_array = np.array(self.data).transpose()
-		self.fig.clear()
-		self.ax.clear()
-		try:
-			self.contourf = plt.tricontourf(self.data_array[0],self.data_array[1],self.data_array[4],cmap=colormaps.viridis)
-		except RuntimeError:
-			pass
-		except ValueError:
-			pass
-
-		try:
-			self.cbar = plt.colorbar()
-		except RuntimeError:
-			pass
-
-		self.colordata = []
-		for value in [((x-min(self.data_array[4]))/(max(self.data_array[4]-min(self.data_array[4])))) for x in self.data_array[4]]:
-			self.colordata.append(colormaps.viridis(value))
-
-		for v, value in enumerate(self.data_array[0]):
-			self.plot = plt.plot([self.data_array[0][v]], [self.data_array[1][v]],'o',color=self.colordata[v],ms=10)
-
-		self.canvas.draw()
-
-	def updatePreviewGrid(self):
 		if self.meas_par != None:
 			plt.figure('plotter')
 			self.data_array = np.array(self.data).transpose()
-			self.extent = [self.data_array[0].min(), self.data_array[0].max(), self.data_array[1].min(),self.data_array[1].max()]
-			if self.pm['x_steps'] != None:
-				self.z_data = [list(self.data_array[4][x:x+self.pm['x_steps']]) for x in range(0,len(self.data_array[4]),self.pm['x_steps'])]
-				if len(self.z_data[-1]) < self.pm['x_steps']:
-					self.z_data[-1] += [np.nan]*(self.pm['x_steps'] - len(self.z_data[-1]))
-				self.extent[1] = max([self.data_array[0].max(),self.meas_par['xt'],self.meas_par['xf']])
-				self.extent[0] = min([self.data_array[0].min(),self.meas_par['xt'],self.meas_par['xf']])
-				if self.pm['y_steps'] != None and len(self.z_data) < self.pm['y_steps']:
-					self.z_data += [[np.nan]*self.pm['x_steps']]*(self.pm['y_steps']-len(self.z_data))
-					self.extent[3] = max([self.data_array[1].max(),self.meas_par['yt'],self.meas_par['yf']])
-					self.extent[2] = min([self.data_array[1].min(),self.meas_par['yt'],self.meas_par['yf']])
-			else:
-				self.z_data = [list(self.data_array[4])]
-			if self.extent[2] == self.extent[3]:
-				self.extent[3] += 0.000001
-			if self.extent[0] == self.extent[1]:
-				self.extent[1] += 0.000001
+			print 'current plot type:',self.plot_type.currentText()
+			if self.plot_type.currentText() == 'Grid':
+				self.fig.clear()
+				self.ax.clear()
+				self.extent = [self.data_array[0].min(), self.data_array[0].max(), self.data_array[1].min(),self.data_array[1].max()]
+				if self.pm['x_steps'] != None:
+					self.z_data = [list(self.data_array[4][x:x+self.pm['x_steps']]) for x in range(0,len(self.data_array[4]),self.pm['x_steps'])]
+					if len(self.z_data[-1]) < self.pm['x_steps']:
+						self.z_data[-1] += [np.nan]*(self.pm['x_steps'] - len(self.z_data[-1]))
+					self.extent[1] = max([self.data_array[0].max(),self.meas_par['xt'],self.meas_par['xf']])
+					self.extent[0] = min([self.data_array[0].min(),self.meas_par['xt'],self.meas_par['xf']])
+					if self.pm['y_steps'] != None and len(self.z_data) < self.pm['y_steps']:
+						self.z_data += [[np.nan]*self.pm['x_steps']]*(self.pm['y_steps']-len(self.z_data))
+						self.extent[3] = max([self.data_array[1].max(),self.meas_par['yt'],self.meas_par['yf']])
+						self.extent[2] = min([self.data_array[1].min(),self.meas_par['yt'],self.meas_par['yf']])
+				else:
+					self.z_data = [list(self.data_array[4])]
+				if self.extent[2] == self.extent[3]:
+					self.extent[3] += 0.000001
+				if self.extent[0] == self.extent[1]:
+					self.extent[1] += 0.000001
 
-			#correct for swapped .extents()
-			if not self.pm['x_forward']:
-				for r, row in enumerate(self.z_data):
-					self.z_data[r] = row[::-1]
-			if self.pm['y_forward']:
-				self.z_data = self.z_data[::-1]
-			try:
-				self.img.set_data(self.z_data)
-				self.img.autoscale()
-				self.img.set_extent(self.extent)
-			except AttributeError:
-				self.img = plt.imshow(self.z_data,extent=self.extent, interpolation='nearest',cmap=colormaps.viridis, aspect='auto')
-				self.cbar = plt.colorbar()
-			self.fig.tight_layout()
-			self.canvas.draw()
+				#correct for swapped .extents()
+				if not self.pm['x_forward']:
+					for r, row in enumerate(self.z_data):
+						self.z_data[r] = row[::-1]
+				if self.pm['y_forward']:
+					self.z_data = self.z_data[::-1]
+				try:
+					self.img.set_data(self.z_data)
+					#self.img.autoscale()
+					self.img.set_extent(self.extent)
+				except AttributeError:
+					self.img = plt.imshow(self.z_data,extent=self.extent, interpolation='nearest',cmap=colormaps.viridis, aspect='auto')
+					self.cbar = plt.colorbar()
+				self.updateGraph()
+			elif self.plot_type.currentText() in ['Contour','Filled contour']:
+				self.fig.clear()
+				self.ax.clear()
+				if self.plot_type.currentText() == 'Contour':
+					self.plotwith = plt.tricontour
+				elif self.plot_type.currentText() == 'Filled contour':
+					self.plotwith = plt.tricontourf
+				try:
+					self.contourf = self.plotwith(self.data_array[0],self.data_array[1],self.data_array[4],cmap=colormaps.viridis)
+				except RuntimeError:
+					pass
+				except ValueError:
+					pass
+
+				try:
+					self.cbar = plt.colorbar()
+				except RuntimeError:
+					pass
+				if self.show_datapoints.isChecked():
+					self.colordata = []
+					for value in [((x-min(self.data_array[4]))/(max(self.data_array[4]-min(self.data_array[4])))) for x in self.data_array[4]]:
+						self.colordata.append(colormaps.viridis(value))
+
+					for v, value in enumerate(self.data_array[0]):
+						self.plot = plt.plot([self.data_array[0][v]], [self.data_array[1][v]],'o',color=self.colordata[v],ms=10)
+
+				self.updateGraph()
 
 	def checkForGraph(self):
 		try:
@@ -1464,12 +1500,6 @@ class MapperPlot(QtGui.QMainWindow):
 		except ValueError:
 			pass
 
-		if self.give_title.isChecked():
-			self.fig_title = self.fig.suptitle(self.title.text())
-			self.fig_title.set_visible(True)
-		else:
-			self.fig_title.set_visible(False)
-
 		if self.meas_par != None:
 			if any(x in 'mM' for x in self.meas_par['mtype']):
 				self.ax.set_xlabel('X position (mm)')
@@ -1477,11 +1507,14 @@ class MapperPlot(QtGui.QMainWindow):
 			elif any(x in 's' for x in self.meas_par['mtype']):
 				self.ax.set_xlabel('X position (V)')
 				self.ax.set_ylabel('Y position (V)')
+		plt.tight_layout()
 
 		if self.verbose_graph.isChecked():
 			try:
 				self.text_on_graph.remove()
 			except AttributeError:
+				pass
+			except ValueError:
 				pass
 			self.textstr = ''
 			for key in sorted(self.pm.keys()):
@@ -1501,20 +1534,20 @@ class MapperPlot(QtGui.QMainWindow):
 				self.text_on_graph.remove()
 			except AttributeError:
 				pass
+			except ValueError:
+				pass
 
 		if self.manual_limits.isChecked():
 			try:
 				float(self.x_min.text())
 				float(self.x_max.text())
 				self.ax.set_xlim(float(self.x_min.text()),float(self.x_max.text()))
-				print 'I did this'
 			except ValueError:
 				pass
 			try:
 				float(self.y_max.text())
 				float(self.y_min.text())
 				self.ax.set_ylim(float(self.y_min.text()),float(self.y_max.text()))
-				print 'You did this?'
 			except ValueError:
 				pass
 			if self.x_min.text() == self.x_max.text() == '':
@@ -1526,8 +1559,10 @@ class MapperPlot(QtGui.QMainWindow):
 			self.ax.set_ylim(auto = True)
 			#self.ax.relim()
 			self.ax.autoscale_view()
-		plt.tight_layout()
+
 		if self.give_title.isChecked():
+			self.fig_title = self.fig.suptitle(self.title.text())
+			self.fig_title.set_visible(True)
 			try:
 				self.base_of_text = self.fig_title.get_window_extent().get_points()[0][1]
 				self.height_of_plot = float(self.dpi.text())*self.image_height_inches
@@ -1536,11 +1571,36 @@ class MapperPlot(QtGui.QMainWindow):
 				pass
 			except RuntimeError:
 				pass
+		else:
+			self.fig_title.set_visible(False)
 		self.canvas.draw()
 
 
 	def exportGraph(self):
-		pass
+		self.filetype_string = ''
+		self.graphical_extensions = []
+		for key in sorted(self.canvas.get_supported_filetypes_grouped().keys()):
+			self.filetype_string += key + ' ('
+			for value in self.canvas.get_supported_filetypes_grouped()[key]:
+				self.filetype_string += '*.'+value+' '
+				self.graphical_extensions.append(value)
+			self.filetype_string = self.filetype_string[:-1]+');;'
+		#self.filetype_string = self.filetype_string[:-2]
+		self.filetype_string = self.filetype_string + 'Raw text (*.txt)'
+
+		if self.filename == '':
+			self.target_path = self.settings['targetfolder']
+		else:
+			self.target_path = os.path.dirname(self.filename)
+		self.filename, _ = QtGui.QFileDialog.getSaveFileName(self,'Save as...',self.target_path,self.filetype_string,'Portable Network Graphics (*.png)')
+		if self.filename != '':
+			if os.path.splitext(self.filename)[1][1:] in self.graphical_extensions:
+				plt.savefig(self.filename,dpi=float(self.dpi.text()))
+			else:
+				with open(self.filename,'w') as f:
+					self.csvfile = csv.writer(f,delimiter = ',')
+					self.csvfile.writerows(list(np.array(self.data).transpose()))
+			self.statusBar().showMessage('Graph data saved to: '+str(self.filename))
 
 	def resetPlot(self):
 		pass
