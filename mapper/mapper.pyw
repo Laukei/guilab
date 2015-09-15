@@ -105,6 +105,7 @@ class MapperProg(QtGui.QMainWindow):
 		self.populateLayouts()
 
 		#finalize things
+		self.filename = ''
 		self.settings = getSettings()
 		self.setDefaults()
 		self.name_of_application = 'Mapper'
@@ -603,8 +604,9 @@ class MapperProg(QtGui.QMainWindow):
 		# http://stackoverflow.com/questions/17835302/how-to-update-matplotlibs-imshow-window-interactively
 		# "much faster to use object's 'set_data' method" <-- use this instead of new imshow for efficiency
 		#
+		plt.figure('preview')
 		self.data_array = np.array(self.data).transpose()
-		
+
 		self.extent = [self.data_array[0].min(), self.data_array[0].max(), self.data_array[1].min(),self.data_array[1].max()]
 		if self.x_steps != None:
 			self.z_data = [list(self.data_array[4][x:x+self.x_steps]) for x in range(0,len(self.data_array[4]),self.x_steps)]
@@ -645,7 +647,7 @@ class MapperProg(QtGui.QMainWindow):
 			self.canvas
 		except AttributeError:
 			self.data = np.array([[]])
-			self.fig = plt.figure(figsize = (4.5,4), dpi=72, facecolor=(1,1,1), edgecolor=(0,0,0))
+			self.fig = plt.figure('preview',figsize = (4.5,4), dpi=72, facecolor=(1,1,1), edgecolor=(0,0,0))
 			self.ax = self.fig.add_subplot(1,1,1)
 			#self.plot = plt.tricontourf(self.data)#*self.data)
 			#self.ax.set_ylabel('dunno')
@@ -678,7 +680,55 @@ class MapperProg(QtGui.QMainWindow):
 		self.mapper_drone.abort = True
 
 	def plotExternal(self):
-		pass
+		self.plotWindow = MapperPlot(self.data,self.processMetadata(),self.settings,self.filename)
+		self.plotWindow.setWindowModality(QtCore.Qt.WindowModality.ApplicationModal)
+		self.plotWindow.hide()
+		self.plotWindow.show()
+
+	def processMetadata(self):
+		#bundles values in the plotter screen for display in plotter and saving/loading
+		self.appstate = {
+			'username':self.username.text(),
+			'dateandtime':self.dateandtime.text(),
+			'batchName':self.batchName.text(),
+			'deviceId':self.deviceId.text(),
+			'sma':self.sma.text(),
+			'manualtemp':self.manualtemp.isChecked(),
+			'temp':self.temp.text(),
+			'comment':self.comment.text(),
+			'manualbias':self.manualbias.isChecked(),
+			'bias':self.bias.text(),
+			'xfrom_m':self.xfrom_m.text(),
+			'xto_m':self.xto_m.text(),
+			'yfrom_m':self.yfrom_m.text(),
+			'yto_m':self.yto_m.text(),
+			'volt_m':self.volt_m.text(),
+			'freq_m':self.freq_m.text(),
+			'readv_m':self.readv_m.text(),
+			'clicks_m':self.clicks_m.text(),
+			'numpoints_m':self.numpoints_m.text(),
+			'closedloop_m':self.closedloop_m.isChecked(),
+			'xfrom_s':self.xfrom_s.text(),
+			'xto_s':self.xto_s.text(),
+			'yfrom_s':self.yfrom_s.text(),
+			'yto_s':self.yto_s.text(),
+			'xvoltstep_s':self.xvoltstep_s.text(),
+			'yvoltstep_s':self.yvoltstep_s.text(),
+			'meastime_c':self.meastime_c.text(),
+			'pausetime_c':self.pausetime_c.text(),
+			'meastime_r':self.meastime_r.text(),
+			'pausetime_r':self.pausetime_r.text()
+			}
+		try:
+			self.appstate['meas_par']=self.meas_par
+			self.appstate['x_steps']=self.x_steps
+			self.appstate['y_steps']=self.y_steps
+			self.appstate['x_forward']=self.x_forward
+			self.appstate['y_forward']=self.y_forward
+		except AttributeError:
+			self.appstate['meas_par']=None
+		return self.appstate
+
 
 	def export(self):
 		pass
@@ -1158,6 +1208,346 @@ class SettingsDialog(QtGui.QDialog):
 					else:
 						self.settings[self.tabtier['v']][self.childtier['v']] = None
 
+class MapperPlot(QtGui.QMainWindow):
+	def __init__(self,data,metadata,settings,filename):
+		super(MapperPlot, self).__init__()
+		self.data = data
+		self.pm = metadata
+		self.settings = settings
+		self.se = settings['EXPORT']
+		self.filename = filename
+		try:
+			self.meas_par = self.pm['meas_par']
+		except KeyError:
+			self.meas_par = None
+		self.initUI()
+
+	def initUI(self):
+		#lay out window
+		self.checkForGraph()
+		self.createLayoutAndWidgets()
+		self.connectWidgets()
+		#set settings from settings
+		self.populateLayouts()
+		#update plot
+
+		#booom shake the roooom
+		self.resize(800,600)
+		self.setWindowTitle('Mapper Plotter')
+		self.setWindowIcon(QtGui.QIcon(r'icons\plot.png'))
+		self.showMaximized()
+		self.show()
+		self.updatePreviewGrid()
+
+	def createLayoutAndWidgets(self):
+		self.give_title = QtGui.QCheckBox('Graph title')
+		self.title = QtGui.QLineEdit(self.autoTitle())
+		self.verbose_graph = QtGui.QCheckBox('Verbose graph')
+		self.manual_limits = QtGui.QCheckBox('Manual axes')
+		self.x_max = QtGui.QLineEdit('')
+		self.x_min = QtGui.QLineEdit('')
+		self.y_max = QtGui.QLineEdit('')
+		self.y_min = QtGui.QLineEdit('')
+		self.exp_width = QtGui.QLineEdit('8')
+		self.exp_height = QtGui.QLineEdit('6')
+		self.dpi = QtGui.QLineEdit('150')
+		self.exp_units = QtGui.QComboBox(self)
+		self.possible_units = ['in','cm','px']
+		for unit in self.possible_units:
+			self.exp_units.addItem(unit)
+
+		self.checkables = [ ['title',self.give_title],
+							['verbose',self.verbose_graph],
+							['manual_axes',self.manual_limits]]
+
+		self.textables = [  ['ymax',self.y_max],
+							['ymin',self.y_min],
+							['xmax',self.x_max],
+							['xmin',self.x_min],
+							['width',self.exp_width],
+							['height',self.exp_height],
+							['dpi',self.dpi]]
+
+		self.resetButton = QtGui.QPushButton('Reset')
+		self.closeButton = QtGui.QPushButton('Close')
+		self.exportButton = QtGui.QPushButton('Export')
+
+		self.manual_limits_widget = QtGui.QWidget()
+		self.manual_limits_widget.manual_grid = QtGui.QGridLayout()
+		self.manual_limits_widget.setLayout(self.manual_limits_widget.manual_grid)
+		self.manual_limits_widget.manual_grid.addWidget(QtGui.QLabel('X<sub>min</sub>'),0,0)
+		self.manual_limits_widget.manual_grid.addWidget(self.x_min,0,1)
+		self.manual_limits_widget.manual_grid.addWidget(QtGui.QLabel('X<sub>max</sub>'),0,2)
+		self.manual_limits_widget.manual_grid.addWidget(self.x_max,0,3)
+		self.manual_limits_widget.manual_grid.addWidget(QtGui.QLabel('Y<sub>min</sub>'),1,0)
+		self.manual_limits_widget.manual_grid.addWidget(self.y_min,1,1)
+		self.manual_limits_widget.manual_grid.addWidget(QtGui.QLabel('Y<sub>max</sub>'),1,2)
+		self.manual_limits_widget.manual_grid.addWidget(self.y_max,1,3)
+		self.manual_limits_widget.setVisible(False)
+
+		self.title_widget = QtGui.QWidget()
+		self.title_widget.title_grid = QtGui.QGridLayout()
+		self.title_widget.setLayout(self.title_widget.title_grid)
+		self.title_widget.title_grid.addWidget(QtGui.QLabel('Title:'),0,0)
+		self.title_widget.title_grid.addWidget(self.title,0,1)
+		self.title_widget.setVisible(False)
+
+		self.export_widget = QtGui.QGroupBox('Export settings')
+		self.export_widget.export_grid = QtGui.QGridLayout()
+		self.export_widget.setLayout(self.export_widget.export_grid)
+		self.export_widget.export_grid.addWidget(QtGui.QLabel('Width:'),0,0)
+		self.export_widget.export_grid.addWidget(self.exp_width,0,1)
+		self.export_widget.export_grid.addWidget(QtGui.QLabel('Height:'),0,2)
+		self.export_widget.export_grid.addWidget(self.exp_height,0,3)
+		self.export_widget.export_grid.addWidget(QtGui.QLabel('DPI:'),1,0)
+		self.export_widget.export_grid.addWidget(self.dpi,1,1)
+		self.export_widget.export_grid.addWidget(QtGui.QLabel('Units:'),1,2)
+		self.export_widget.export_grid.addWidget(self.exp_units,1,3)
+
+		self.panel_widget = QtGui.QWidget()
+		self.panel_widget.vbox = QtGui.QVBoxLayout()
+		self.panel_widget.setLayout(self.panel_widget.vbox)
+		self.panel_widget.setFixedWidth(200)
+
+		self.gridsection1 = QtGui.QGridLayout()
+		self.gridsection2 = QtGui.QGridLayout()
+		#self.vbox = QtGui.QVBoxLayout()
+		self.hbox = QtGui.QHBoxLayout()
+
+		self.gridsection1.setSpacing(10)
+		self.gridsection1.addWidget(self.give_title,0,0)
+
+		self.bottombar = QtGui.QHBoxLayout()
+		self.bottombar.addWidget(self.exportButton)
+		self.bottombar.addWidget(self.resetButton)
+		self.bottombar.addWidget(self.closeButton)
+
+		self.gridsection2.addWidget(self.verbose_graph,3,0)
+		self.gridsection2.addWidget(self.manual_limits,4,0)
+
+		self.panel_widget.vbox.addLayout(self.gridsection1)
+		self.panel_widget.vbox.addWidget(self.title_widget)
+		self.panel_widget.vbox.addLayout(self.gridsection2)
+		self.panel_widget.vbox.addWidget(self.manual_limits_widget)
+		self.panel_widget.vbox.addWidget(self.export_widget)
+		self.panel_widget.vbox.addStretch(1)
+		self.panel_widget.vbox.addLayout(self.bottombar)
+
+		self.scroll_area = QtGui.QScrollArea()
+		self.scroll_area.setBackgroundRole(QtGui.QPalette.Dark)
+		self.scroll_area.setAlignment(QtCore.Qt.AlignCenter)
+		self.scroll_area.setWidget(self.canvas)
+
+		self.hbox.addWidget(self.scroll_area)
+		self.hbox.addWidget(self.panel_widget)
+
+		self.mainthing = QtGui.QWidget()
+		self.setCentralWidget(self.mainthing)
+		self.mainthing.setLayout(self.hbox)
+
+	def connectWidgets(self):
+		self.verbose_graph.stateChanged.connect(self.updateGraph)
+		self.manual_limits.toggled.connect(self.manual_limits_widget.setVisible)
+		self.manual_limits.toggled.connect(self.updateGraph)
+		self.x_max.textChanged.connect(self.updateGraph)
+		self.x_min.textChanged.connect(self.updateGraph)
+		self.y_max.textChanged.connect(self.updateGraph)
+		self.y_min.textChanged.connect(self.updateGraph)
+		self.give_title.toggled.connect(self.title_widget.setVisible)
+		self.title.textChanged.connect(self.updateGraph)
+		self.give_title.toggled.connect(self.updateGraph)
+		self.exp_units.activated.connect(self.updateGraph)
+		self.exp_width.textChanged.connect(self.updateGraph)
+		self.exp_height.textChanged.connect(self.updateGraph)
+		self.dpi.textChanged.connect(self.updateGraph)
+		self.closeButton.clicked.connect(self.close)
+		self.resetButton.clicked.connect(self.resetPlot)
+		self.exportButton.clicked.connect(self.exportGraph)
+
+	def populateLayouts(self):
+		for value in self.checkables:
+			value[1].setChecked(self.se[value[0]])
+		for value in self.textables:
+			if self.se[value[0]] == None:
+				value[1].setText('')
+			else:
+				value[1].setText(str(self.se[value[0]]))
+		self.exp_units.setCurrentIndex(self.possible_units.index(self.se['unit']))
+
+	def autoTitle(self):
+		return 'Title!'		
+
+	def updatePreview(self):
+		self.data_array = np.array(self.data).transpose()
+		self.fig.clear()
+		self.ax.clear()
+		try:
+			self.contourf = plt.tricontourf(self.data_array[0],self.data_array[1],self.data_array[4],cmap=colormaps.viridis)
+		except RuntimeError:
+			pass
+		except ValueError:
+			pass
+
+		try:
+			self.cbar = plt.colorbar()
+		except RuntimeError:
+			pass
+
+		self.colordata = []
+		for value in [((x-min(self.data_array[4]))/(max(self.data_array[4]-min(self.data_array[4])))) for x in self.data_array[4]]:
+			self.colordata.append(colormaps.viridis(value))
+
+		for v, value in enumerate(self.data_array[0]):
+			self.plot = plt.plot([self.data_array[0][v]], [self.data_array[1][v]],'o',color=self.colordata[v],ms=10)
+
+		self.canvas.draw()
+
+	def updatePreviewGrid(self):
+		if self.meas_par != None:
+			plt.figure('plotter')
+			self.data_array = np.array(self.data).transpose()
+			self.extent = [self.data_array[0].min(), self.data_array[0].max(), self.data_array[1].min(),self.data_array[1].max()]
+			if self.pm['x_steps'] != None:
+				self.z_data = [list(self.data_array[4][x:x+self.pm['x_steps']]) for x in range(0,len(self.data_array[4]),self.pm['x_steps'])]
+				if len(self.z_data[-1]) < self.pm['x_steps']:
+					self.z_data[-1] += [np.nan]*(self.pm['x_steps'] - len(self.z_data[-1]))
+				self.extent[1] = max([self.data_array[0].max(),self.meas_par['xt'],self.meas_par['xf']])
+				self.extent[0] = min([self.data_array[0].min(),self.meas_par['xt'],self.meas_par['xf']])
+				if self.pm['y_steps'] != None and len(self.z_data) < self.pm['y_steps']:
+					self.z_data += [[np.nan]*self.pm['x_steps']]*(self.pm['y_steps']-len(self.z_data))
+					self.extent[3] = max([self.data_array[1].max(),self.meas_par['yt'],self.meas_par['yf']])
+					self.extent[2] = min([self.data_array[1].min(),self.meas_par['yt'],self.meas_par['yf']])
+			else:
+				self.z_data = [list(self.data_array[4])]
+			if self.extent[2] == self.extent[3]:
+				self.extent[3] += 0.000001
+			if self.extent[0] == self.extent[1]:
+				self.extent[1] += 0.000001
+
+			#correct for swapped .extents()
+			if not self.pm['x_forward']:
+				for r, row in enumerate(self.z_data):
+					self.z_data[r] = row[::-1]
+			if self.pm['y_forward']:
+				self.z_data = self.z_data[::-1]
+			try:
+				self.img.set_data(self.z_data)
+				self.img.autoscale()
+				self.img.set_extent(self.extent)
+			except AttributeError:
+				self.img = plt.imshow(self.z_data,extent=self.extent, interpolation='nearest',cmap=colormaps.viridis, aspect='auto')
+				self.cbar = plt.colorbar()
+			self.fig.tight_layout()
+			self.canvas.draw()
+
+	def checkForGraph(self):
+		try:
+			self.canvas
+		except AttributeError:
+			self.fig = plt.figure('plotter',figsize = (4.5,4), dpi=72, facecolor=(1,1,1), edgecolor=(0,0,0))
+			self.ax = self.fig.add_subplot(1,1,1)
+			#self.plot = plt.tricontourf(self.data)#*self.data)
+			#self.ax.set_ylabel('dunno')
+			#self.ax.set_xlabel('nobody told me')
+			self.canvas = FigureCanvas(self.fig)
+			self.fig.tight_layout()
+
+	def updateGraph(self):
+		plt.figure('plotter')
+		try:
+			self.fig.set_dpi(float(self.dpi.text()))
+			self.conversion_factors = {'in':1,'cm':1.0/2.54,'px':(1.0/float(self.dpi.text()))}
+			self.image_height_inches = float(self.exp_height.text())*self.conversion_factors[self.exp_units.currentText()]
+			self.image_width_inches = float(self.exp_width.text())*self.conversion_factors[self.exp_units.currentText()]
+			self.fig.set_size_inches(self.image_width_inches,self.image_height_inches, forward=True)
+			self.canvas.resize(float(self.dpi.text())*self.image_width_inches,float(self.dpi.text())*self.image_height_inches)
+		except ValueError:
+			pass
+
+		if self.give_title.isChecked():
+			self.fig_title = self.fig.suptitle(self.title.text())
+			self.fig_title.set_visible(True)
+		else:
+			self.fig_title.set_visible(False)
+
+		if self.meas_par != None:
+			if any(x in 'mM' for x in self.meas_par['mtype']):
+				self.ax.set_xlabel('X position (mm)')
+				self.ax.set_ylabel('Y position (mm)')
+			elif any(x in 's' for x in self.meas_par['mtype']):
+				self.ax.set_xlabel('X position (V)')
+				self.ax.set_ylabel('Y position (V)')
+
+		if self.verbose_graph.isChecked():
+			try:
+				self.text_on_graph.remove()
+			except AttributeError:
+				pass
+			self.textstr = ''
+			for key in sorted(self.pm.keys()):
+				if key in ['batchName','comment','dateandtime','readv_m','bias','temp','sma','username','deviceId','meas_par']:
+					if key != 'meas_par':
+						self.textstr += str(key)+': '+str(self.pm[key])+'\n'
+					elif self.meas_par != None:
+						for key2 in sorted(self.pm['meas_par'].keys()):
+							if key2 in ['measurer','mover']:
+								self.textstr += str(key2)+': '+str(self.pm[key][key2].__class__.__name__)+'\n'
+							else:
+								self.textstr += str(key2)+': '+str(self.pm[key][key2])+'\n'
+			self.text_on_graph = self.ax.text(0.01, 0.99, self.textstr[:-1], transform = self.ax.transAxes, fontsize = 9,
+				verticalalignment = 'top')
+		else:
+			try:
+				self.text_on_graph.remove()
+			except AttributeError:
+				pass
+
+		if self.manual_limits.isChecked():
+			try:
+				float(self.x_min.text())
+				float(self.x_max.text())
+				self.ax.set_xlim(float(self.x_min.text()),float(self.x_max.text()))
+				print 'I did this'
+			except ValueError:
+				pass
+			try:
+				float(self.y_max.text())
+				float(self.y_min.text())
+				self.ax.set_ylim(float(self.y_min.text()),float(self.y_max.text()))
+				print 'You did this?'
+			except ValueError:
+				pass
+			if self.x_min.text() == self.x_max.text() == '':
+				self.ax.set_xlim(auto = True)
+			if self.y_min.text() == self.y_max.text() == '':
+				self.ax.set_ylim(auto = True)
+		else:
+			self.ax.set_xlim(auto = True)
+			self.ax.set_ylim(auto = True)
+			#self.ax.relim()
+			self.ax.autoscale_view()
+		plt.tight_layout()
+		if self.give_title.isChecked():
+			try:
+				self.base_of_text = self.fig_title.get_window_extent().get_points()[0][1]
+				self.height_of_plot = float(self.dpi.text())*self.image_height_inches
+				self.fig.subplots_adjust(top=((self.base_of_text/self.height_of_plot)-0.015))
+			except AttributeError:
+				pass
+			except RuntimeError:
+				pass
+		self.canvas.draw()
+
+
+	def exportGraph(self):
+		pass
+
+	def resetPlot(self):
+		pass
+
+	def closeEvent(self,event):
+		self.fig.clear()
+		event.accept()
 
 
 def main():
