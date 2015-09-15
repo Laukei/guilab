@@ -44,6 +44,7 @@ class Mover:
 class FakeMotor(Mover):
 	def __init__(self):
 		self.pos = {'x':2.5, 'y':2.5, 'z':2.5}
+	devicetype = 'Mm'
 
 	def setDefaults(self,voltage,frequency,clicks,readvoltage):
 		self.voltage = voltage
@@ -80,6 +81,7 @@ class FakeMotor(Mover):
 class FakeScanner(Mover):
 	def __init__(self):
 		self.pos = {'x':0,'y':0}
+	devicetype = 's'
 
 	def setDefaults(self,stepx,stepy):
 		self.stepdict = {'x':stepx,'y':stepy}

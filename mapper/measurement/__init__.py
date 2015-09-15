@@ -30,6 +30,7 @@ class Measurer:
 		print 'Not implemented: close'
 	
 class FakeLockIn(Measurer):
+	devicetype = 'r'
 	def setDefaults(self,meastime,pausetime):
 		self.meastime = meastime
 		self.pausetime = pausetime
@@ -41,6 +42,7 @@ class FakeLockIn(Measurer):
 
 
 class FakeCounter(Measurer):
+	devicetype = 'c'
 	def setDefaults(self,meastime,pausetime):
 		self.meastime = meastime
 		self.pausetime = pausetime

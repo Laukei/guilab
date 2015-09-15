@@ -197,12 +197,6 @@ class MapperProg(QtGui.QMainWindow):
 		self.count_widget = QtGui.QWidget()
 		self.reflec_widget = QtGui.QWidget()
 
-		#self.metadata_widget.setLayout(self.metadata_grid)
-		#self.motor_widget.setLayout(self.motor_grid)
-		#self.scanner_widget.setLayout(self.scanner_grid)
-		#self.count_widget.setLayout(self.count_grid)
-		#self.reflec_widget.setLayout(self.reflec_grid)
-
 		for grid, widget in [[self.metadata_grid, self.metadata_widget],
 							 [self.motor_grid, self.motor_widget],
 							 [self.scanner_grid, self.scanner_widget],
@@ -210,7 +204,6 @@ class MapperProg(QtGui.QMainWindow):
 							 [self.reflec_grid, self.reflec_widget]]:
 			layout = QtGui.QVBoxLayout()
 			layout.addLayout(grid)
-			layout.addStretch(1)
 			widget.setLayout(layout)
 	
 		self.movement_tab = QtGui.QTabWidget()
@@ -233,8 +226,10 @@ class MapperProg(QtGui.QMainWindow):
 		self.vbox = QtGui.QVBoxLayout()
 		self.vbox.addWidget(self.metadata_widget)
 		self.vbox.addLayout(self.tabhbox)
+		self.vbox.addStretch(1)
 		self.hbox.addLayout(self.vbox)
 		self.hbox.addWidget(self.canvas)
+		self.canvas.setSizePolicy(QtGui.QSizePolicy(QtGui.QSizePolicy.Expanding,QtGui.QSizePolicy.Expanding))
 		self.tabhbox.addWidget(self.movement_tab)
 		self.tabhbox.addWidget(self.measurement_tab)
 
@@ -390,29 +385,6 @@ class MapperProg(QtGui.QMainWindow):
 								'pausetime_r':self.pausetime_r}
 
 	def setDefaults(self):
-		'''
-		FOR REFERENCE:
-		xfrom_m
-		xto_m
-		yfrom_m
-		yto_m
-		volt_m
-		freq_m
-		clicks_m
-		readv_m
-		closedloop_m
-		numpoints_m
-		xfrom_s
-		xto_s
-		yfrom_s
-		yto_s
-		xvoltstep_s
-		yvoltstep_s
-		meastime_c
-		pausetime_c
-		meastime_r
-		pausetime_r
-		'''
 		self.key_object_map['xfrom_m'].setText('')
 		self.key_object_map['xto_m'].setText('')
 		self.key_object_map['yfrom_m'].setText('')
@@ -516,6 +488,14 @@ class MapperProg(QtGui.QMainWindow):
 
 		elif 'c' in self.meas_par['mtype']:
 			self.meas_par['measurer'] = measurement.findClass(self.settings['CORE']['countertype'])()
+
+		if not any(x in self.meas_par['mover'].devicetype for x in self.meas_par['mtype']):
+			self.statusBar().showMessage('Movement device different type from expected! Check settings. Aborting...')
+			return
+		if not any(x in self.meas_par['measurer'].devicetype for x in self.meas_par['mtype']):
+			self.statusBar().showMessage('Measurement device different type from expected! Check settings. Aborting...')
+			return
+
 
 		#perform final metadata stuff
 		if not self.manualtemp.isChecked() or not self.manualbias.isChecked():
@@ -689,6 +669,17 @@ class MapperProg(QtGui.QMainWindow):
 
 	def closeEvent(self,event):
 		setSettings(self.settings)
+		event.accept()
+
+	def resizeEvent(self,event):
+		try:
+			self.fig.tight_layout()
+			self.canvas.draw()
+		except ValueError:
+			pass
+		except np.linalg.linalg.LinAlgError:
+			pass
+		event.accept()
 
 
 class MapperDrone(QtCore.QObject):
