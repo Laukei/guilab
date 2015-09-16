@@ -1209,9 +1209,9 @@ class MapperPlot(QtGui.QMainWindow):
 		#lay out window
 		self.checkForGraph()
 		self.createLayoutAndWidgets()
-		self.connectWidgets()
 		#set settings from settings
 		self.populateLayouts()
+		self.connectWidgets()
 		#update plot
 
 		#booom shake the roooom
@@ -1219,8 +1219,8 @@ class MapperPlot(QtGui.QMainWindow):
 		self.setWindowTitle('Mapper Plotter')
 		self.setWindowIcon(QtGui.QIcon(r'icons\plot.png'))
 		self.showMaximized()
-		self.show()
 		self.updatePreview()
+		self.show()
 
 	def createLayoutAndWidgets(self):
 		self.give_title = QtGui.QCheckBox('Graph title')
@@ -1347,23 +1347,28 @@ class MapperPlot(QtGui.QMainWindow):
 		self.mainthing.setLayout(self.hbox)
 
 	def connectWidgets(self):
-		self.verbose_graph.stateChanged.connect(self.updateGraph)
+		self.verbose_graph.stateChanged.connect(self.checkVerbosity)
+
 		self.manual_limits.toggled.connect(self.manual_limits_widget.setVisible)
-		self.manual_limits.toggled.connect(self.updateGraph)
-		self.x_max.textChanged.connect(self.updateGraph)
-		self.x_min.textChanged.connect(self.updateGraph)
-		self.y_max.textChanged.connect(self.updateGraph)
-		self.y_min.textChanged.connect(self.updateGraph)
+		self.manual_limits.toggled.connect(self.replot)
+		self.x_max.textChanged.connect(self.replot)
+		self.x_min.textChanged.connect(self.replot)
+		self.y_max.textChanged.connect(self.replot)
+		self.y_min.textChanged.connect(self.replot)
+
 		self.give_title.toggled.connect(self.title_widget.setVisible)
-		self.title.textChanged.connect(self.updateGraph)
-		self.give_title.toggled.connect(self.updateGraph)
-		self.exp_units.activated.connect(self.updateGraph)
+		self.title.textChanged.connect(self.checkTitle)
+		self.give_title.toggled.connect(self.checkTitle)
+
 		self.plot_type.activated.connect(self.updatePreview)
 		self.plot_type.activated.connect(self.plotTypeOptions)
 		self.show_datapoints.toggled.connect(self.updatePreview)
-		self.exp_width.textChanged.connect(self.updateGraph)
-		self.exp_height.textChanged.connect(self.updateGraph)
-		self.dpi.textChanged.connect(self.updateGraph)
+
+		self.exp_units.activated.connect(self.updateCanvasSize)
+		self.exp_width.textChanged.connect(self.updateCanvasSize)
+		self.exp_height.textChanged.connect(self.updateCanvasSize)
+		self.dpi.textChanged.connect(self.updateCanvasSize)
+
 		self.closeButton.clicked.connect(self.close)
 		self.resetButton.clicked.connect(self.resetPlot)
 		self.exportButton.clicked.connect(self.exportGraph)
@@ -1412,10 +1417,10 @@ class MapperPlot(QtGui.QMainWindow):
 		if self.meas_par != None:
 			plt.figure('plotter')
 			self.data_array = np.array(self.data).transpose()
-			print 'current plot type:',self.plot_type.currentText()
+			#print 'current plot type:',self.plot_type.currentText()
 			if self.plot_type.currentText() == 'Grid':
 				self.fig.clear()
-				self.ax.clear()
+				self.ax = self.fig.add_subplot(1,1,1)
 				self.extent = [self.data_array[0].min(), self.data_array[0].max(), self.data_array[1].min(),self.data_array[1].max()]
 				if self.pm['x_steps'] != None:
 					self.z_data = [list(self.data_array[4][x:x+self.pm['x_steps']]) for x in range(0,len(self.data_array[4]),self.pm['x_steps'])]
@@ -1433,24 +1438,20 @@ class MapperPlot(QtGui.QMainWindow):
 					self.extent[3] += 0.000001
 				if self.extent[0] == self.extent[1]:
 					self.extent[1] += 0.000001
-
 				#correct for swapped .extents()
 				if not self.pm['x_forward']:
 					for r, row in enumerate(self.z_data):
 						self.z_data[r] = row[::-1]
 				if self.pm['y_forward']:
 					self.z_data = self.z_data[::-1]
-				try:
-					self.img.set_data(self.z_data)
-					#self.img.autoscale()
-					self.img.set_extent(self.extent)
-				except AttributeError:
-					self.img = plt.imshow(self.z_data,extent=self.extent, interpolation='nearest',cmap=colormaps.viridis, aspect='auto')
-					self.cbar = plt.colorbar()
-				self.updateGraph()
+
+				self.img = plt.imshow(self.z_data,extent=self.extent, interpolation='nearest',cmap=colormaps.viridis, aspect='auto')
+				self.cbar = plt.colorbar()
+
+
 			elif self.plot_type.currentText() in ['Contour','Filled contour']:
 				self.fig.clear()
-				self.ax.clear()
+				self.ax = self.fig.add_subplot(1,1,1)
 				if self.plot_type.currentText() == 'Contour':
 					self.plotwith = plt.tricontour
 				elif self.plot_type.currentText() == 'Filled contour':
@@ -1461,61 +1462,94 @@ class MapperPlot(QtGui.QMainWindow):
 					pass
 				except ValueError:
 					pass
-
 				try:
 					self.cbar = plt.colorbar()
 				except RuntimeError:
 					pass
+
+				print 'began adding datapoints'
+				self.start_time = time.time()
 				if self.show_datapoints.isChecked():
 					self.colordata = []
 					for value in [((x-min(self.data_array[4]))/(max(self.data_array[4]-min(self.data_array[4])))) for x in self.data_array[4]]:
 						self.colordata.append(colormaps.viridis(value))
-
+					print 'finished doing colordata at:',time.time()-self.start_time
 					for v, value in enumerate(self.data_array[0]):
 						self.plot = plt.plot([self.data_array[0][v]], [self.data_array[1][v]],'o',color=self.colordata[v],ms=10)
-
-				self.updateGraph()
+					print 'finished plotting at:',time.time()-self.start_time
+		self.updateCanvasSize()
+		self.checkVerbosity()
+		self.checkAxes()
+		self.checkTitle()
 
 	def checkForGraph(self):
 		try:
 			self.canvas
 		except AttributeError:
-			self.fig = plt.figure('plotter',figsize = (4.5,4), dpi=72, facecolor=(1,1,1), edgecolor=(0,0,0))
+			self.fig = plt.figure('plotter',figsize = (8,6), dpi=150, facecolor=(1,1,1), edgecolor=(0,0,0))
 			self.ax = self.fig.add_subplot(1,1,1)
 			#self.plot = plt.tricontourf(self.data)#*self.data)
 			#self.ax.set_ylabel('dunno')
 			#self.ax.set_xlabel('nobody told me')
 			self.canvas = FigureCanvas(self.fig)
-			self.fig.tight_layout()
 
-	def updateGraph(self):
+	def checkTitle(self):
 		plt.figure('plotter')
-		try:
-			self.fig.set_dpi(float(self.dpi.text()))
-			self.conversion_factors = {'in':1,'cm':1.0/2.54,'px':(1.0/float(self.dpi.text()))}
-			self.image_height_inches = float(self.exp_height.text())*self.conversion_factors[self.exp_units.currentText()]
-			self.image_width_inches = float(self.exp_width.text())*self.conversion_factors[self.exp_units.currentText()]
-			self.fig.set_size_inches(self.image_width_inches,self.image_height_inches, forward=True)
-			self.canvas.resize(float(self.dpi.text())*self.image_width_inches,float(self.dpi.text())*self.image_height_inches)
-		except ValueError:
-			pass
+		if self.give_title.isChecked():
+			self.fig_title = self.fig.suptitle(self.title.text())
+			self.fig_title.set_visible(True)
+		else:
+			self.fig_title.set_visible(False)
+		self.replot()
 
-		if self.meas_par != None:
-			if any(x in 'mM' for x in self.meas_par['mtype']):
-				self.ax.set_xlabel('X position (mm)')
-				self.ax.set_ylabel('Y position (mm)')
-			elif any(x in 's' for x in self.meas_par['mtype']):
-				self.ax.set_xlabel('X position (V)')
-				self.ax.set_ylabel('Y position (V)')
-		plt.tight_layout()
-
-		if self.verbose_graph.isChecked():
+	def replot(self):
+		plt.figure('plotter')
+		if self.manual_limits.isChecked():
+			print 'manual axes... yo miley, what\'s good?'
 			try:
-				self.text_on_graph.remove()
+				float(self.x_min.text())
+				float(self.x_max.text())
+				self.ax.set_xlim(float(self.x_min.text()),float(self.x_max.text()))
+			except ValueError:
+				self.ax.set_xlim(auto = True)
+			try:
+				float(self.y_max.text())
+				float(self.y_min.text())
+				self.ax.set_ylim(float(self.y_min.text()),float(self.y_max.text()))
+			except ValueError:
+				self.ax.set_ylim(auto = True)
+		else:
+			print 'we\'re all in this industry'
+			self.ax.set_xlim(auto = True)
+			self.ax.set_ylim(auto = True)
+			#self.ax.relim()
+			self.ax.autoscale_view()
+
+		self.checkAxes()
+		self.fig.tight_layout()
+
+		if self.give_title.isChecked():
+			try:
+				self.base_of_text = self.fig_title.get_window_extent(renderer=self.canvas.renderer).get_points()[0][1]
+				self.height_of_plot = float(self.dpi.text())*self.image_height_inches
+				self.fig.subplots_adjust(top=((self.base_of_text/self.height_of_plot)-0.015))
 			except AttributeError:
 				pass
-			except ValueError:
-				pass
+
+		self.canvas.draw()
+
+	def updateCanvasSize(self):
+		self.fig.set_dpi(float(self.dpi.text()))
+		self.conversion_factors = {'in':1,'cm':1.0/2.54,'px':(1.0/float(self.dpi.text()))}
+		self.image_height_inches = float(self.exp_height.text())*self.conversion_factors[self.exp_units.currentText()]
+		self.image_width_inches = float(self.exp_width.text())*self.conversion_factors[self.exp_units.currentText()]
+		self.fig.set_size_inches(self.image_width_inches,self.image_height_inches, forward=True)
+		self.canvas.resize(float(self.dpi.text())*self.image_width_inches,float(self.dpi.text())*self.image_height_inches)
+		self.replot()
+
+	def checkVerbosity(self):
+		plt.figure('plotter')
+		if self.verbose_graph.isChecked():
 			self.textstr = ''
 			for key in sorted(self.pm.keys()):
 				if key in ['batchName','comment','dateandtime','readv_m','bias','temp','sma','username','deviceId','meas_par']:
@@ -1532,51 +1566,23 @@ class MapperPlot(QtGui.QMainWindow):
 		else:
 			try:
 				self.text_on_graph.remove()
-			except AttributeError:
+			except:
 				pass
-			except ValueError:
-				pass
+		self.replot()
 
-		if self.manual_limits.isChecked():
-			try:
-				float(self.x_min.text())
-				float(self.x_max.text())
-				self.ax.set_xlim(float(self.x_min.text()),float(self.x_max.text()))
-			except ValueError:
-				pass
-			try:
-				float(self.y_max.text())
-				float(self.y_min.text())
-				self.ax.set_ylim(float(self.y_min.text()),float(self.y_max.text()))
-			except ValueError:
-				pass
-			if self.x_min.text() == self.x_max.text() == '':
-				self.ax.set_xlim(auto = True)
-			if self.y_min.text() == self.y_max.text() == '':
-				self.ax.set_ylim(auto = True)
-		else:
-			self.ax.set_xlim(auto = True)
-			self.ax.set_ylim(auto = True)
-			#self.ax.relim()
-			self.ax.autoscale_view()
-
-		if self.give_title.isChecked():
-			self.fig_title = self.fig.suptitle(self.title.text())
-			self.fig_title.set_visible(True)
-			try:
-				self.base_of_text = self.fig_title.get_window_extent().get_points()[0][1]
-				self.height_of_plot = float(self.dpi.text())*self.image_height_inches
-				self.fig.subplots_adjust(top=((self.base_of_text/self.height_of_plot)-0.015))
-			except AttributeError:
-				pass
-			except RuntimeError:
-				pass
-		else:
-			self.fig_title.set_visible(False)
-		self.canvas.draw()
+	def checkAxes(self):
+		plt.figure('plotter')
+		if self.meas_par != None:
+			if any(x in 'mM' for x in self.meas_par['mtype']):
+				self.ax.set_xlabel('X position (mm)')
+				self.ax.set_ylabel('Y position (mm)')
+			elif any(x in 's' for x in self.meas_par['mtype']):
+				self.ax.set_xlabel('X position (V)')
+				self.ax.set_ylabel('Y position (V)')
 
 
 	def exportGraph(self):
+		plt.figure('plotter')
 		self.filetype_string = ''
 		self.graphical_extensions = []
 		for key in sorted(self.canvas.get_supported_filetypes_grouped().keys()):
