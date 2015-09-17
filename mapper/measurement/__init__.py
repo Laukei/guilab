@@ -4,11 +4,16 @@
 
 import time
 import random
+import visa
+
+timeout = 5000
 
 def findClass(key=None):
 	index = {
 			'fakecounter':FakeCounter,
 			'fakereflec':FakeLockIn,
+			'universalcounter':UniversalCounter,
+			'lockin':LockIn,
 			 }
 	if key == None:
 		return index
@@ -29,6 +34,53 @@ class Measurer:
 	def close(self):
 		print 'Not implemented: close'
 	
+class UniversalCounter(Measurer):
+	devicetype = 'c'
+	def __init__(self,address='GPIB0::3'):
+		try:
+			self.rm = visa.ResourceManager()
+			self.device = self.rm.open_resource(address)
+			self.device.timeout = timeout
+			self.device.write(':INP1:COUP AC;IMP 50 OHM')
+		except visa.VisaIOError as e:
+			self.device = str(e)
+		except OSError as e:
+			self.device = str(e)
+
+	def setDefaults(self,meastime,pausetime):
+		self.meastime = float(meastime)
+		self.pausetime = float(pausetime)
+		self.device.write('SENS:TOT:ARM:STOP:TIM '+str(self.meastime))
+
+	def getMeasurement(self):
+		time.sleep(self.pausetime)
+		return (float(self.device.query('READ?'))/float(self.meastime))
+
+	def close(self):
+		self.device.close()
+
+class LockIn(Measurer):
+	devicetype = 'r'
+	def __init__(self,address='GPIB0::16'):
+		try:
+			self.rm = visa.ResourceManager()
+			self.device = self.rm.open_resource(address,read_termination = '\r\n')
+			self.device.timeout = timeout
+		except visa.VisaIOError as e:
+			self.device = str(e)
+		except OSError as e:
+			self.device = str(e)
+
+	def setDefaults(self,meastime,pausetime):
+		self.pausetime = float(pausetime)
+
+	def getMeasurement(self):
+		time.sleep(self.pausetime)
+		return float(self.device.query('ADC. 1'))
+
+	def close(self):
+		self.device.close()
+
 class FakeLockIn(Measurer):
 	devicetype = 'r'
 	def setDefaults(self,meastime,pausetime):

@@ -12,13 +12,17 @@ from PySide import QtGui, QtCore, QtWebKit
 
 import json
 import time
-#import csv
-#import os
+import csv
+import os
 
 import colormaps
 import movement
 import measurement
-from sim900.fake import Sim900
+
+# swappable for fake modules (modulename -> modulename.fake)
+from sim900 import Sim900
+from attenuator import Attenuator
+# end swappable
 
 from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -40,14 +44,13 @@ def defaultSettings():
 				'countertype':'fakecounter',
 				'reflectype':'fakereflec'
 				},
-			'SIM':{
+			'DEVICES':{
 				'sim900addr':'ASRL1',
 				'vsourcemod':2,
 				'tsourcemod':1,
-				'vmeasmod':7,
-				'vsourceinput':1,
-				'vmeasinput':2,
-				'tinput':3},
+				'tinput':3,
+				'att1addr':'GPIB::10',
+				'att2addr':'GPIB::15'},
 			'EXPORT':{
 					'title':True,
 					'verbose':False,
@@ -272,12 +275,27 @@ class MapperProg(QtGui.QMainWindow):
 		self.comment = QtGui.QLineEdit('')
 		self.manualbias = QtGui.QCheckBox('Manual?')
 		self.bias = QtGui.QLineEdit('')
+		self.laserpower = QtGui.QDoubleSpinBox()
+		self.manualatten = QtGui.QCheckBox('Manual?')
+		self.atten = QtGui.QLineEdit('')
+		self.wavelength = QtGui.QLineEdit('')
+		print 'Still to add: metadata saved/loaded/passed to the settings-defaults thing...'
 
 		self.dateandtime.setEnabled(False)
 		self.manualtemp.stateChanged.connect(self.temp.setEnabled)
 		self.manualbias.stateChanged.connect(self.bias.setEnabled)
 		self.temp.setEnabled(False)
 		self.bias.setEnabled(False)
+		self.manualatten.stateChanged.connect(self.atten.setEnabled)
+		self.manualatten.stateChanged.connect(self.wavelength.setEnabled)
+		self.laserpower.setSuffix('dBm')
+		self.laserpower.setRange(-200,20)
+		self.laserpower.setSpecialValueText('Not measured')
+		self.laserpower.setValue(-200)
+		self.laserpower.setAccelerated(True)
+		self.atten.setEnabled(False)
+		self.wavelength.setEnabled(False)
+
 
 		self.metadata_grid.setSpacing(10)
 		self.subgrid1 = QtGui.QGridLayout()
@@ -294,16 +312,28 @@ class MapperProg(QtGui.QMainWindow):
 
 		self.metadata_grid.addWidget(QtGui.QLabel('SMA:'),2,0)
 		self.metadata_grid.addWidget(self.sma,2,1)
+
 		self.subgrid1.addWidget(self.manualtemp,0,0)
 		self.subgrid1.addWidget(QtGui.QLabel('Temp:'),0,1)
 		self.subgrid1.addWidget(self.temp,0,2)
+		self.subgrid1.addWidget(QtGui.QLabel('K'),0,3)
 		self.subgrid1.addWidget(self.manualbias,1,0)
 		self.subgrid1.addWidget(QtGui.QLabel('Bias:'),1,1)
 		self.subgrid1.addWidget(self.bias,1,2)
-		self.metadata_grid.addLayout(self.subgrid1,2,2,2,2)
+		self.subgrid1.addWidget(QtGui.QLabel('V'),1,3)
+		self.subgrid1.addWidget(self.manualatten,2,0)
+		self.subgrid1.addWidget(QtGui.QLabel('Atten:'),2,1)
+		self.subgrid1.addWidget(self.atten,2,2)
+		self.subgrid1.addWidget(QtGui.QLabel('dB'),2,3)
+		self.subgrid1.addWidget(QtGui.QLabel(u'λ:'),3,1)
+		self.subgrid1.addWidget(self.wavelength,3,2)
+		self.subgrid1.addWidget(QtGui.QLabel('nm'),3,3)
 
+		self.metadata_grid.addLayout(self.subgrid1,2,2,4,2)
 		self.metadata_grid.addWidget(QtGui.QLabel('Comments:'),3,0)
 		self.metadata_grid.addWidget(self.comment,3,1)
+		self.metadata_grid.addWidget(QtGui.QLabel('Laser power:'),4,0)
+		self.metadata_grid.addWidget(self.laserpower,4,1)
 
 		#populate motor_grid
 		self.xfrom_m = QtGui.QLineEdit('')
@@ -522,16 +552,35 @@ class MapperProg(QtGui.QMainWindow):
 
 		#perform final metadata stuff
 		if not self.manualtemp.isChecked() or not self.manualbias.isChecked():
-			self.sim900 = Sim900(self.settings['SIM']['sim900addr'])
+			self.sim900 = Sim900(self.settings['DEVICES']['sim900addr'])
 			self.sim900check = self.sim900.check()
 			if type(self.sim900check) != str:
-				self.sim900 = Sim900(self.settings['SIM']['sim900addr'])
+				self.sim900 = Sim900(self.settings['DEVICES']['sim900addr'])
 				if not self.manualtemp.isChecked():
-					self.temp.setText(str(self.sim900.query(self.settings['SIM']['tsourcemod'],'TVAL? '+str(self.settings['SIM']['tinput'])+',1')))
+					self.temp.setText('%.2f' % float(self.sim900.query(self.settings['DEVICES']['tsourcemod'],'TVAL? '+str(self.settings['DEVICES']['tinput'])+',1')))
 				if not self.manualbias.isChecked():
-					self.bias.setText(str(self.sim900.query(self.settings['SIM']['vsourcemod'],'VOLT? '+str(self.settings['SIM']['vsourceinput'])+',1')))
+					self.bias.setText(str(float(self.sim900.query(self.settings['DEVICES']['vsourcemod'],'VOLT?'))*int(self.sim900.query(self.settings['DEVICES']['vsourcemod'],'EXON?'))))
 				self.sim900.close()
 
+		if not self.manualatten.isChecked():
+			self.set_wavelength = None
+			self.set_attenuation = 0
+			for attenaddr in [self.settings['DEVICES']['att1addr'],self.settings['DEVICES']['att2addr']]:
+				self.attenuator_device = Attenuator(attenaddr)
+				self.attencheck = self.attenuator_device.check()
+				if type(self.attencheck) != str:
+					self.set_attenuation += float(self.attenuator_device.query(':INP:ATT?').strip('\x00'))
+					if self.set_wavelength == None:
+						self.set_wavelength = float(self.attenuator_device.query(':INP:WAV?'))
+					elif self.set_wavelength != float(self.attenuator_device.query(':INP:WAV?')):
+						self.statusBar().showMessage('Warning: attenuators disagree on wavelength!')
+						return
+					self.attenuator_device.close()
+				else:
+					self.statusBar().showMessage('Warning: problem communicating to attenuator on: '+str(attenaddr))
+					return
+			self.atten.setText(str(self.set_attenuation))
+			self.wavelength.setText(str(self.set_wavelength*1e9))
 		self.dateandtime.setText(time.asctime())
 		self.haltAction.setEnabled(True)
 		self.acquireAction.setEnabled(False)
@@ -670,6 +719,10 @@ class MapperProg(QtGui.QMainWindow):
 			'comment':self.comment.text(),
 			'manualbias':self.manualbias.isChecked(),
 			'bias':self.bias.text(),
+			'manualatten':self.manualatten.isChecked(),
+			'atten':self.atten.text(),
+			'wavelength':self.wavelength.text(),
+			'power':self.laserpower.text(),
 			'xfrom_m':self.xfrom_m.text(),
 			'xto_m':self.xto_m.text(),
 			'yfrom_m':self.yfrom_m.text(),
@@ -894,9 +947,9 @@ class SettingsDialog(QtGui.QDialog):
 					}
 				},
 			'b':{
-				't':'SIM900',
+				't':'Devices',
 				'w':QtGui.QFormLayout(),
-				'v':'SIM',
+				'v':'DEVICES',
 				'c':{
 					'a':{
 						't':'SIM900 address:',
@@ -917,6 +970,16 @@ class SettingsDialog(QtGui.QDialog):
 						't':'SIM922 sensor channel:',
 						'w':QtGui.QSpinBox(),
 						'v':'tinput'
+						},
+					'e':{
+						't':'Attenuator 1 address:',
+						'w':QtGui.QLineEdit(),
+						'v':'att1addr'
+						},
+					'f':{
+						't':'Attenuator 2 address:',
+						'w':QtGui.QLineEdit(),
+						'v':'att2addr'
 						}
 					}
 				},
@@ -1505,7 +1568,6 @@ class MapperPlot(QtGui.QMainWindow):
 	def replot(self):
 		plt.figure('plotter')
 		if self.manual_limits.isChecked():
-			print 'manual axes... yo miley, what\'s good?'
 			try:
 				float(self.x_min.text())
 				float(self.x_max.text())
@@ -1519,7 +1581,6 @@ class MapperPlot(QtGui.QMainWindow):
 			except ValueError:
 				self.ax.set_ylim(auto = True)
 		else:
-			print 'we\'re all in this industry'
 			self.ax.set_xlim(auto = True)
 			self.ax.set_ylim(auto = True)
 			#self.ax.relim()
@@ -1552,7 +1613,7 @@ class MapperPlot(QtGui.QMainWindow):
 		if self.verbose_graph.isChecked():
 			self.textstr = ''
 			for key in sorted(self.pm.keys()):
-				if key in ['batchName','comment','dateandtime','readv_m','bias','temp','sma','username','deviceId','meas_par']:
+				if key in ['batchName','comment','dateandtime','readv_m','bias','temp','sma','username','deviceId','meas_par','atten','wavelength','power']:
 					if key != 'meas_par':
 						self.textstr += str(key)+': '+str(self.pm[key])+'\n'
 					elif self.meas_par != None:

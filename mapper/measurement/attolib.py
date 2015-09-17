@@ -35,14 +35,14 @@ class Stages:
         aidmap = {'x':3, 'y':2, 'z':1}
         '''
         self.aidmap = {'x':3, 'y':2, 'z':1} #axis ID map
-        #print 'initialising device on',Stages_port
+        print 'initialising device on',Stages_port
         self.rm = visa.ResourceManager()
         self.instrument = self.rm.open_resource(Stages_port, baud_rate = 38400)
         #self.instrument = visa.SerialInstrument(Stages_port, baud_rate = 38400, data_bits = 8, stop_bits = 1, parity = visa.no_parity)
-        self.instrument.query_delay = 0.05
+        self.instrument.query_delay = 0.2
         self.instrument.write('echo on')
         self.empty_buffer()
-        #self.get_capacitances()
+        self.get_capacitances()
         for key, value in kwargs.iteritems():
             if key == 'aidmap':
                 if type(value)!=dict:
@@ -91,12 +91,9 @@ class Stages:
     def read(self):
         self.readbuffer = []
         while True:
-            try:
-                self.readbuffer.append(self.rawread().strip('\n').strip('>').strip())
-                if self.readbuffer[-1] == 'OK':
-                    break
-            except visa.VisaIOError as e:
-                raise e
+            self.readbuffer.append(self.rawread().strip('\n').strip('>').strip())
+            if self.readbuffer[-1] == 'OK':
+                break
         return self.readbuffer
 
     def query(self,command):
@@ -194,14 +191,14 @@ class Readout:
         (connecting a channel to an alias). This is by default:
         aidmap = {'x':1, 'y':2, 'z':3} (reverse of Stages!)
         '''
-        #print 'initialising device on',Read_port
+        print 'initialising device on',Read_port
         self.aidmap = {'x':1, 'y':2, 'z':3} #axis ID map
         self.rm = visa.ResourceManager()
         self.instrument = self.rm.open_resource(Read_port, baud_rate = 57600, data_bits = 8, stop_bits=visa.constants.StopBits.one, read_termination='', write_termination='')
         #self.instrument = visa.SerialInstrument( term_chars="")
         self.set_single_shot()
         self.empty_buffer()
-        #print 'buffer clear'
+        print 'buffer clear'
 
     def set_single_shot(self):
         self.instrument.write('SM1')
@@ -218,8 +215,7 @@ class Readout:
         '''
         while True:
             try:
-                #print self.instrument.read()
-                self.instrument.read()
+                print self.instrument.read()
             except:# visa.VisaIOError:
                 break
 
