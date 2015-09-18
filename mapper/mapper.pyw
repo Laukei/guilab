@@ -53,6 +53,7 @@ def defaultSettings():
 				'att2addr':'GPIB::15'},
 			'EXPORT':{
 					'title':True,
+					'convert_to_sde':True,
 					'verbose':False,
 					'manual_axes':False,
 					'xmax':None,
@@ -279,6 +280,7 @@ class MapperProg(QtGui.QMainWindow):
 		self.manualatten = QtGui.QCheckBox('Manual?')
 		self.atten = QtGui.QLineEdit('')
 		self.wavelength = QtGui.QLineEdit('')
+		self.dcr = QtGui.QLineEdit('')
 		print 'Still to add: metadata saved/loaded/passed to the settings-defaults thing...'
 
 		self.dateandtime.setEnabled(False)
@@ -295,7 +297,6 @@ class MapperProg(QtGui.QMainWindow):
 		self.laserpower.setAccelerated(True)
 		self.atten.setEnabled(False)
 		self.wavelength.setEnabled(False)
-
 
 		self.metadata_grid.setSpacing(10)
 		self.subgrid1 = QtGui.QGridLayout()
@@ -334,6 +335,8 @@ class MapperProg(QtGui.QMainWindow):
 		self.metadata_grid.addWidget(self.comment,3,1)
 		self.metadata_grid.addWidget(QtGui.QLabel('Laser power:'),4,0)
 		self.metadata_grid.addWidget(self.laserpower,4,1)
+		self.metadata_grid.addWidget(QtGui.QLabel('DCR:'),5,0)
+		self.metadata_grid.addWidget(self.dcr,5,1)
 
 		#populate motor_grid
 		self.xfrom_m = QtGui.QLineEdit('')
@@ -723,6 +726,7 @@ class MapperProg(QtGui.QMainWindow):
 			'atten':self.atten.text(),
 			'wavelength':self.wavelength.text(),
 			'power':self.laserpower.text(),
+			'dcr':self.dcr.text(),
 			'xfrom_m':self.xfrom_m.text(),
 			'xto_m':self.xto_m.text(),
 			'yfrom_m':self.yfrom_m.text(),
@@ -1114,7 +1118,12 @@ class SettingsDialog(QtGui.QDialog):
 						'w':QtGui.QCheckBox(),
 						'v':'title'
 						},
-					'b':{
+					'b1':{
+						't':'Convert counts map to SDE:',
+						'w':QtGui.QCheckBox(),
+						'v':'convert_to_sde'
+						},
+					'b2':{
 						't':'Verbose graph:',
 						'w':QtGui.QCheckBox(),
 						'v':'verbose'
@@ -1295,6 +1304,7 @@ class MapperPlot(QtGui.QMainWindow):
 		self.x_min = QtGui.QLineEdit('')
 		self.y_max = QtGui.QLineEdit('')
 		self.y_min = QtGui.QLineEdit('')
+		self.convert_to_sde = QtGui.QCheckBox('Convert to SDE')
 		self.exp_width = QtGui.QLineEdit('8')
 		self.exp_height = QtGui.QLineEdit('6')
 		self.dpi = QtGui.QLineEdit('150')
@@ -1310,7 +1320,8 @@ class MapperPlot(QtGui.QMainWindow):
 		self.checkables = [ ['title',self.give_title],
 							['verbose',self.verbose_graph],
 							['manual_axes',self.manual_limits],
-							['show_datapoints',self.show_datapoints]]
+							['show_datapoints',self.show_datapoints],
+							['convert_to_sde',self.convert_to_sde]]
 
 		self.textables = [  ['ymax',self.y_max],
 							['ymin',self.y_min],
@@ -1389,6 +1400,19 @@ class MapperPlot(QtGui.QMainWindow):
 
 		self.panel_widget.vbox.addLayout(self.gridsection1)
 		self.panel_widget.vbox.addWidget(self.title_widget)
+		if self.meas_par != None and 'c' in self.meas_par['mtype']:
+			if self.pm['wavelength'] != '' and self.pm['power'] != 'Not measured' \
+				and self.pm['atten'] != '' and self.pm['dcr']!= '':
+				self.panel_widget.vbox.addWidget(self.convert_to_sde)
+			else:
+				self.panel_widget.vbox.addWidget(self.convert_to_sde)
+				self.convert_to_sde.setDisabled(True)
+				self.convert_to_sde.setChecked(False)
+				self.statusBar().showMessage('Unable to calculate SDE: insufficient data (power/attenuation/wavelength/dcr)')
+		elif self.meas_par != None and 'c' not in self.meas_par['mtype']:
+			self.convert_to_sde.setDisabled(True)
+			self.convert_to_sde.setChecked(False)
+
 		self.panel_widget.vbox.addLayout(self.gridsection2)
 		self.panel_widget.vbox.addWidget(self.manual_limits_widget)
 		self.panel_widget.vbox.addLayout(self.gridsection3)
@@ -1426,6 +1450,7 @@ class MapperPlot(QtGui.QMainWindow):
 		self.plot_type.activated.connect(self.updatePreview)
 		self.plot_type.activated.connect(self.plotTypeOptions)
 		self.show_datapoints.toggled.connect(self.updatePreview)
+		self.convert_to_sde.toggled.connect(self.updatePreview)
 
 		self.exp_units.activated.connect(self.updateCanvasSize)
 		self.exp_width.textChanged.connect(self.updateCanvasSize)
@@ -1480,6 +1505,12 @@ class MapperPlot(QtGui.QMainWindow):
 		if self.meas_par != None:
 			plt.figure('plotter')
 			self.data_array = np.array(self.data).transpose()
+			if self.checkSde() != False:
+				self.data_array[4] -= self.dc
+				for i, item in enumerate(self.data_array[4]):
+					if item < 0:
+						self.data_array[4][i] = 0.0
+				self.data_array[4] *= self.scaling_factor
 			#print 'current plot type:',self.plot_type.currentText()
 			if self.plot_type.currentText() == 'Grid':
 				self.fig.clear()
@@ -1540,6 +1571,13 @@ class MapperPlot(QtGui.QMainWindow):
 					for v, value in enumerate(self.data_array[0]):
 						self.plot = plt.plot([self.data_array[0][v]], [self.data_array[1][v]],'o',color=self.colordata[v],ms=10)
 					print 'finished plotting at:',time.time()-self.start_time
+			if self.checkSde() == True:
+				self.cbar.set_label('SDE (%)')
+			elif 'c' in self.meas_par['mtype'] and self.checkSde() != True:
+				self.cbar.set_label('Counts ($s^{-1}$)')
+			elif 'r' in self.meas_par['mtype']:
+				self.cbar.set_label('Reflection (arbitrary)')
+
 		self.updateCanvasSize()
 		self.checkVerbosity()
 		self.checkAxes()
@@ -1613,7 +1651,7 @@ class MapperPlot(QtGui.QMainWindow):
 		if self.verbose_graph.isChecked():
 			self.textstr = ''
 			for key in sorted(self.pm.keys()):
-				if key in ['batchName','comment','dateandtime','readv_m','bias','temp','sma','username','deviceId','meas_par','atten','wavelength','power']:
+				if key in ['batchName','comment','dateandtime','readv_m','bias','temp','sma','username','deviceId','meas_par','atten','wavelength','power','dcr']:
 					if key != 'meas_par':
 						self.textstr += str(key)+': '+str(self.pm[key])+'\n'
 					elif self.meas_par != None:
@@ -1641,6 +1679,22 @@ class MapperPlot(QtGui.QMainWindow):
 				self.ax.set_xlabel('X position (V)')
 				self.ax.set_ylabel('Y position (V)')
 
+	def checkSde(self):
+		if self.convert_to_sde.isChecked() and self.convert_to_sde.isEnabled():
+			try:
+				self.lp = float(self.pm['power'].strip('dBm'))
+				self.ta = float(self.pm['atten'])
+				self.la = float(self.pm['wavelength'])*1e-9
+				self.dc = float(self.pm['dcr'])
+				self.input_power = 0.001 * (10.0 ** ((self.lp-self.ta)/10.0))
+				self.photon_energy = (6.626070040e-34 * 299792458.0) / self.la
+				self.scaling_factor = 100 * self.photon_energy / self.input_power
+				return True
+			except ValueError:
+				self.statusBar().showMessage('Unable to convert power/atten/wavelength to number, is there text in the field?')
+				return False
+		else:
+			return False
 
 	def exportGraph(self):
 		plt.figure('plotter')
@@ -1666,7 +1720,7 @@ class MapperPlot(QtGui.QMainWindow):
 			else:
 				with open(self.filename,'w') as f:
 					self.csvfile = csv.writer(f,delimiter = ',')
-					self.csvfile.writerows(list(np.array(self.data).transpose()))
+					self.csvfile.writerows(list(np.array(self.data)))
 			self.statusBar().showMessage('Graph data saved to: '+str(self.filename))
 
 	def resetPlot(self):
