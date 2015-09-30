@@ -38,13 +38,11 @@ def getSettings():
 	return settings
 
 def defaultSettings():
-	return {'CORE':{
+	return {'DEVICES':{
 				'scannertype':'fakescanner',
 				'motortype':'fakemotor',
 				'countertype':'fakecounter',
-				'reflectype':'fakereflec'
-				},
-			'DEVICES':{
+				'reflectype':'fakereflec',
 				'sim900addr':'ASRL1',
 				'vsourcemod':2,
 				'tsourcemod':1,
@@ -86,7 +84,22 @@ def defaultSettings():
 					'meastime_c': 0.7,
 					'pausetime_c': 0.2,
 					'meastime_r': 0.05,
-					'pausetime_r': 0.05},
+					'pausetime_r': 0.05,
+					'username':'',
+					'dateandtime':'',
+					'batchName':'',
+					'deviceId':'',
+					'sma':'',
+					'manualtemp': False,
+					'temp':'',
+					'comment':'',
+					'manualbias': False,
+					'bias':'',
+					'laserpower': -200,
+					'manualatten': False,
+					'atten':'',
+					'wavelength':'',
+					'dcr':''},
 			'targetfolder':''
 			}
 
@@ -120,6 +133,7 @@ class MapperProg(QtGui.QMainWindow):
 		self.setWindowIcon(QtGui.QIcon(r'icons\mapper.png'))
 		self.statusBar().showMessage('Ready...')
 		self.show()
+		self.setNeedsSaving(False)
 
 	def createMenuAndToolbar(self):
 		exitAction = QtGui.QAction(QtGui.QIcon(r'icons\exit.png'),'&Exit',self)
@@ -419,7 +433,23 @@ class MapperProg(QtGui.QMainWindow):
 		self.reflec_grid.addWidget(QtGui.QLabel('T<sub>pause</sub>:'),1,0)
 		self.reflec_grid.addWidget(self.pausetime_r,1,1)
 
-		self.key_object_map = {'xfrom_m':self.xfrom_m,
+		self.key_object_map = {
+								'username': self.username,
+								'dateandtime': self.dateandtime,
+								'batchName': self.batchName,
+								'deviceId': self.deviceId,
+								'sma': self.sma,
+								'manualtemp': self.manualtemp,
+								'temp': self.temp,
+								'comment': self.comment,
+								'manualbias': self.manualbias,
+								'bias': self.bias,
+								'laserpower': self.laserpower,
+								'manualatten': self.manualatten,
+								'atten': self.atten,
+								'wavelength': self.wavelength,
+								'dcr': self.dcr,
+								'xfrom_m':self.xfrom_m,
 								'xto_m':self.xto_m,
 								'yfrom_m':self.yfrom_m,
 								'yto_m':self.yto_m,
@@ -439,6 +469,8 @@ class MapperProg(QtGui.QMainWindow):
 								'pausetime_c':self.pausetime_c,
 								'meastime_r':self.meastime_r,
 								'pausetime_r':self.pausetime_r}
+
+
 
 	def setDefaults(self):
 		self.key_object_map['xfrom_m'].setText(str(self.settings['DEFAULTS']['xfrom_m']))
@@ -461,6 +493,26 @@ class MapperProg(QtGui.QMainWindow):
 		self.key_object_map['pausetime_c'].setText(str(self.settings['DEFAULTS']['pausetime_c']))
 		self.key_object_map['meastime_r'].setText(str(self.settings['DEFAULTS']['meastime_r']))
 		self.key_object_map['pausetime_r'].setText(str(self.settings['DEFAULTS']['pausetime_r']))
+		self.key_object_map['username'].setText(str(self.settings['DEFAULTS']['username']))
+		self.key_object_map['dateandtime'].setText(str(self.settings['DEFAULTS']['dateandtime']))
+		self.key_object_map['batchName'].setText(str(self.settings['DEFAULTS']['batchName']))
+		self.key_object_map['deviceId'].setText(str(self.settings['DEFAULTS']['deviceId']))
+		self.key_object_map['sma'].setText(str(self.settings['DEFAULTS']['sma']))
+		self.key_object_map['manualtemp'].setChecked(self.settings['DEFAULTS']['manualtemp'])
+		self.key_object_map['temp'].setText(str(self.settings['DEFAULTS']['temp']))
+		self.key_object_map['comment'].setText(str(self.settings['DEFAULTS']['comment']))
+		self.key_object_map['manualbias'].setChecked(self.settings['DEFAULTS']['manualbias'])
+		self.key_object_map['bias'].setText(str(self.settings['DEFAULTS']['bias']))
+		self.key_object_map['laserpower'].setValue(self.settings['DEFAULTS']['laserpower'])
+		self.key_object_map['manualatten'].setChecked(self.settings['DEFAULTS']['manualatten'])
+		self.key_object_map['atten'].setText(str(self.settings['DEFAULTS']['atten']))
+		self.key_object_map['wavelength'].setText(str(self.settings['DEFAULTS']['wavelength']))
+		self.key_object_map['dcr'].setText(str(self.settings['DEFAULTS']['dcr']))
+
+
+	def setNeedsSaving(self,state=True):
+		self.save_state = state
+		self.setWindowModified(state)
 
 	def acquire(self):
 		#first: work out what measurement we're trying to run
@@ -533,17 +585,17 @@ class MapperProg(QtGui.QMainWindow):
 							return
 		#connect to instrumentation and pass handles through
 		if 'm' in self.meas_par['mtype'] or 'M' in self.meas_par['mtype']:
-			self.meas_par['mover'] = movement.findClass(self.settings['CORE']['motortype'])()
+			self.meas_par['mover'] = movement.findClass(self.settings['DEVICES']['motortype'])()
 
 		elif 's' in self.meas_par['mtype']:
-			self.meas_par['mover'] = movement.findClass(self.settings['CORE']['scannertype'])()
+			self.meas_par['mover'] = movement.findClass(self.settings['DEVICES']['scannertype'])()
 
 		
 		if 'r' in self.meas_par['mtype']:
-			self.meas_par['measurer'] = measurement.findClass(self.settings['CORE']['reflectype'])()
+			self.meas_par['measurer'] = measurement.findClass(self.settings['DEVICES']['reflectype'])()
 
 		elif 'c' in self.meas_par['mtype']:
-			self.meas_par['measurer'] = measurement.findClass(self.settings['CORE']['countertype'])()
+			self.meas_par['measurer'] = measurement.findClass(self.settings['DEVICES']['countertype'])()
 
 		if not any(x in self.meas_par['mover'].devicetype for x in self.meas_par['mtype']):
 			self.statusBar().showMessage('Movement device different type from expected! Check settings. Aborting...')
@@ -911,6 +963,21 @@ class MapperDrone(QtCore.QObject):
 		elif 'c' in self.meas_par['mtype']:
 			self.measurer.setDefaults(	self.meas_par['tm'],
 										self.meas_par['tp'])
+
+'username'
+'dateandtime'
+'batchName'
+'deviceId'
+'sma'
+'manualtemp'
+'temp'
+'comment'
+'manualbias'
+'bias'
+'laserpower'
+'manualatten'
+'atten'
+'wavelength'
 		
 class SettingsDialog(QtGui.QDialog):
 	def __init__(self,settings,movers,measurers):
@@ -919,68 +986,134 @@ class SettingsDialog(QtGui.QDialog):
 		self.movers = movers
 		self.measurers = measurers
 		self.associations = {
-			'a':{
-				't':'Mapper',
+			'b':{
+				''
+				't':'Metadata',
 				'w': QtGui.QFormLayout(),
-				'v':'CORE',
+				'v':'DEFAULTS',
 				'c': {
 					'a':{
-						't':'Scanner controller:',
-						'w': QtGui.QComboBox(),
-						'p': self.movers,
-						'v':'scannertype'
-						},
-					'b':{
-						't':'Motor controller:',
-						'w': QtGui.QComboBox(),
-						'p': self.movers,
-						'v':'motortype'
+						't': 'Username:',
+						'w': QtGui.QLineEdit(),
+						'v': 'username'
 						},
 					'c':{
-						't':'Counter:',
-						'w': QtGui.QComboBox(),
-						'p': self.measurers,
-						'v':'countertype'
+						't': 'Batch:',
+						'w': QtGui.QLineEdit(),
+						'v': 'batchName'
 						},
 					'd':{
-						't':'Reflection:',
-						'w': QtGui.QComboBox(),
-						'p': self.measurers,
-						'v':'reflectype'
-						}	
+						't': 'Device:',
+						'w': QtGui.QLineEdit(),
+						'v': 'deviceId'
+						},
+					'e':{
+						't': 'SMA:',
+						'w': QtGui.QLineEdit(),
+						'v': 'sma'
+						},
+					'f':{
+						't': 'Manual temp:',
+						'w': QtGui.QCheckBox(),
+						'v': 'manualtemp'
+						},
+					'g':{
+						't': 'Temp (K):',
+						'w': QtGui.QLineEdit(),
+						'v': 'temp'
+						},
+					'h':{
+						't': 'Comment',
+						'w': QtGui.QLineEdit(),
+						'v': 'comment'
+						},
+					'i':{
+						't': 'Manual bias:',
+						'w': QtGui.QCheckBox(),
+						'v': 'manualbias'
+						},
+					'j':{
+						't': 'Bias (V):',
+						'w': QtGui.QLineEdit(),
+						'v': 'bias'
+						},
+					'k':{
+						't': 'Laser power:',
+						'w': QtGui.QLineEdit(),
+						'v': 'laserpower'
+						},
+					'l':{
+						't': 'Manual attenuation:',
+						'w': QtGui.QCheckBox(),
+						'v': 'manualatten'
+						},
+					'm':{
+						't': 'Attenuation (dB):',
+						'w': QtGui.QLineEdit(),
+						'v': 'atten'
+						},
+					'n':{
+						't': 'Wavelength (nm)',
+						'w': QtGui.QLineEdit(),
+						'v': 'wavelength'
+						}
 					}
 				},
-			'b':{
+			'a':{
 				't':'Devices',
 				'w':QtGui.QFormLayout(),
 				'v':'DEVICES',
 				'c':{
 					'a':{
+						't':'Scanner type:',
+						'w': QtGui.QComboBox(),
+						'p': self.movers,
+						'v':'scannertype'
+						},
+					'b':{
+						't':'Motor type:',
+						'w': QtGui.QComboBox(),
+						'p': self.movers,
+						'v':'motortype'
+						},
+					'c':{
+						't':'Counter type:',
+						'w': QtGui.QComboBox(),
+						'p': self.measurers,
+						'v':'countertype'
+						},
+					'd':{
+						't':'Reflection type:',
+						'w': QtGui.QComboBox(),
+						'p': self.measurers,
+						'v':'reflectype'
+						},
+					'e':{
 						't':'SIM900 address:',
 						'w':QtGui.QLineEdit(),
 						'v':'sim900addr'
 						},
-					'b':{
+					'f':{
 						't':'SIM928 voltage source module:',
 						'w':QtGui.QSpinBox(),
 						'v':'vsourcemod'
 						},
-					'c':{
+					'g':{
 						't':'SIM922 temperature module:',
 						'w':QtGui.QSpinBox(),
 						'v':'tsourcemod'
 						},
-					'd':{
+					'h':{
 						't':'SIM922 sensor channel:',
 						'w':QtGui.QSpinBox(),
 						'v':'tinput'
 						},
-					'e':{
+					'i':{
 						't':'Attenuator 1 address:',
 						'w':QtGui.QLineEdit(),
 						'v':'att1addr'
 						},
-					'f':{
+					'j':{
 						't':'Attenuator 2 address:',
 						'w':QtGui.QLineEdit(),
 						'v':'att2addr'
