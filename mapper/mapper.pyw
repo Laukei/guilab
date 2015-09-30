@@ -964,20 +964,6 @@ class MapperDrone(QtCore.QObject):
 			self.measurer.setDefaults(	self.meas_par['tm'],
 										self.meas_par['tp'])
 
-'username'
-'dateandtime'
-'batchName'
-'deviceId'
-'sma'
-'manualtemp'
-'temp'
-'comment'
-'manualbias'
-'bias'
-'laserpower'
-'manualatten'
-'atten'
-'wavelength'
 		
 class SettingsDialog(QtGui.QDialog):
 	def __init__(self,settings,movers,measurers):
@@ -1039,7 +1025,7 @@ class SettingsDialog(QtGui.QDialog):
 						},
 					'k':{
 						't': 'Laser power:',
-						'w': QtGui.QLineEdit(),
+						'w': QtGui.QDoubleSpinBox(),
 						'v': 'laserpower'
 						},
 					'l':{
@@ -1368,11 +1354,17 @@ class SettingsDialog(QtGui.QDialog):
 				elif isinstance(self.childtier['w'],QtGui.QLineEdit):
 					self.childtier['w'].setText(str(self.settings[self.tabtier['v']][self.childtier['v']]))
 				elif isinstance(self.childtier['w'],QtGui.QSpinBox) or isinstance(self.childtier['w'],QtGui.QDoubleSpinBox):
-					self.childtier['w'].setMaximum(1000)
-					if self.settings[self.tabtier['v']][self.childtier['v']] != None:
+					if self.childtier['v'] == 'laserpower':
+						self.childtier['w'].setMinimum(-200)
+						self.childtier['w'].setSpecialValueText('Not measured')
+						self.childtier['w'].setSuffix('dBm')
 						self.childtier['w'].setValue(self.settings[self.tabtier['v']][self.childtier['v']])
 					else:
-						self.childtier['w'].setSpecialValueText('None')
+						self.childtier['w'].setMaximum(1000)
+						if self.settings[self.tabtier['v']][self.childtier['v']] != None:
+							self.childtier['w'].setValue(self.settings[self.tabtier['v']][self.childtier['v']])
+						else:
+							self.childtier['w'].setSpecialValueText('None')
 
 	def packageSettings(self):
 		for tabkey in sorted(self.associations.keys()):
