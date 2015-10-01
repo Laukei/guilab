@@ -133,7 +133,7 @@ class MapperProg(QtGui.QMainWindow):
 		self.setWindowIcon(QtGui.QIcon(r'icons\mapper.png'))
 		self.statusBar().showMessage('Ready...')
 		self.show()
-		self.setNeedsSaving(False)
+		self.setNeedsSaving(reset=True)
 
 	def createMenuAndToolbar(self):
 		exitAction = QtGui.QAction(QtGui.QIcon(r'icons\exit.png'),'&Exit',self)
@@ -470,49 +470,25 @@ class MapperProg(QtGui.QMainWindow):
 								'meastime_r':self.meastime_r,
 								'pausetime_r':self.pausetime_r}
 
-
-
 	def setDefaults(self):
-		self.key_object_map['xfrom_m'].setText(str(self.settings['DEFAULTS']['xfrom_m']))
-		self.key_object_map['xto_m'].setText(str(self.settings['DEFAULTS']['xto_m']))
-		self.key_object_map['yfrom_m'].setText(str(self.settings['DEFAULTS']['yfrom_m']))
-		self.key_object_map['yto_m'].setText(str(self.settings['DEFAULTS']['yto_m']))
-		self.key_object_map['volt_m'].setText(str(self.settings['DEFAULTS']['volt_m']))
-		self.key_object_map['freq_m'].setText(str(self.settings['DEFAULTS']['freq_m']))
-		self.key_object_map['readv_m'].setText(str(self.settings['DEFAULTS']['readv_m']))
-		self.key_object_map['clicks_m'].setText(str(self.settings['DEFAULTS']['clicks_m']))
-		self.key_object_map['closedloop_m'].setChecked(self.settings['DEFAULTS']['closedloop_m'])
-		self.key_object_map['numpoints_m'].setText(str(self.settings['DEFAULTS']['numpoints_m']))
-		self.key_object_map['xfrom_s'].setText(str(self.settings['DEFAULTS']['xfrom_s']))
-		self.key_object_map['xto_s'].setText(str(self.settings['DEFAULTS']['xto_s']))
-		self.key_object_map['yfrom_s'].setText(str(self.settings['DEFAULTS']['yfrom_s']))
-		self.key_object_map['yto_s'].setText(str(self.settings['DEFAULTS']['yto_s']))
-		self.key_object_map['xvoltstep_s'].setText(str(self.settings['DEFAULTS']['xvoltstep_s']))
-		self.key_object_map['yvoltstep_s'].setText(str(self.settings['DEFAULTS']['yvoltstep_s']))
-		self.key_object_map['meastime_c'].setText(str(self.settings['DEFAULTS']['meastime_c']))
-		self.key_object_map['pausetime_c'].setText(str(self.settings['DEFAULTS']['pausetime_c']))
-		self.key_object_map['meastime_r'].setText(str(self.settings['DEFAULTS']['meastime_r']))
-		self.key_object_map['pausetime_r'].setText(str(self.settings['DEFAULTS']['pausetime_r']))
-		self.key_object_map['username'].setText(str(self.settings['DEFAULTS']['username']))
-		self.key_object_map['dateandtime'].setText(str(self.settings['DEFAULTS']['dateandtime']))
-		self.key_object_map['batchName'].setText(str(self.settings['DEFAULTS']['batchName']))
-		self.key_object_map['deviceId'].setText(str(self.settings['DEFAULTS']['deviceId']))
-		self.key_object_map['sma'].setText(str(self.settings['DEFAULTS']['sma']))
-		self.key_object_map['manualtemp'].setChecked(self.settings['DEFAULTS']['manualtemp'])
-		self.key_object_map['temp'].setText(str(self.settings['DEFAULTS']['temp']))
-		self.key_object_map['comment'].setText(str(self.settings['DEFAULTS']['comment']))
-		self.key_object_map['manualbias'].setChecked(self.settings['DEFAULTS']['manualbias'])
-		self.key_object_map['bias'].setText(str(self.settings['DEFAULTS']['bias']))
-		self.key_object_map['laserpower'].setValue(self.settings['DEFAULTS']['laserpower'])
-		self.key_object_map['manualatten'].setChecked(self.settings['DEFAULTS']['manualatten'])
-		self.key_object_map['atten'].setText(str(self.settings['DEFAULTS']['atten']))
-		self.key_object_map['wavelength'].setText(str(self.settings['DEFAULTS']['wavelength']))
-		self.key_object_map['dcr'].setText(str(self.settings['DEFAULTS']['dcr']))
+		for key in self.key_object_map.keys():
+			if isinstance(self.key_object_map[key],QtGui.QLineEdit):
+				self.key_object_map[key].setText(str(self.settings['DEFAULTS'][key]))
+				self.key_object_map[key].textChanged.connect(self.setNeedsSaving)
+			elif isinstance(self.key_object_map[key],QtGui.QCheckBox):
+				self.key_object_map[key].setChecked(self.settings['DEFAULTS'][key])
+				self.key_object_map[key].stateChanged.connect(self.setNeedsSaving)
+			elif isinstance(self.key_object_map[key],QtGui.QSpinBox) or isinstance(self.key_object_map[key],QtGui.QDoubleSpinBox):
+				self.key_object_map[key].setValue(self.settings['DEFAULTS'][key])
+				self.key_object_map[key].valueChanged.connect(self.setNeedsSaving)
 
 
-	def setNeedsSaving(self,state=True):
-		self.save_state = state
-		self.setWindowModified(state)
+	def setNeedsSaving(self,**kwargs):
+		if 'reset' in kwargs.keys() and kwargs['reset'] == True:
+			print 'resetting save state'
+			self.setWindowModified(False)
+		else:
+			self.setWindowModified(True)
 
 	def acquire(self):
 		#first: work out what measurement we're trying to run
