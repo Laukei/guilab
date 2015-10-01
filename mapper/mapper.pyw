@@ -482,14 +482,41 @@ class MapperProg(QtGui.QMainWindow):
 				self.key_object_map[key].setValue(self.settings['DEFAULTS'][key])
 				self.key_object_map[key].valueChanged.connect(self.setNeedsSaving)
 
-
 	def setNeedsSaving(self,**kwargs):
 		if 'reset' in kwargs.keys() and kwargs['reset'] == True:
-			print 'resetting save state'
 			self.setWindowModified(False)
 		else:
 			self.setWindowModified(True)
 
+	def checkNeedsSaving(self, event=None):
+		if self.isWindowModified():
+			if self.filename == '':
+				self.question = 'Do you want to save data?'
+			else:
+				self.question = 'Do you want to save changes to '+str(self.filename)+'?'
+			reply = QtGui.QMessageBox.question(self,'Mapper',
+				self.question,QtGui.QMessageBox.Save | QtGui.QMessageBox.Discard | QtGui.QMessageBox.Cancel, QtGui.QMessageBox.Save)
+			if reply == QtGui.QMessageBox.Discard:
+				if event != None:
+					event.accept()
+				else:
+					return False
+			elif reply == QtGui.QMessageBox.Cancel:
+				if event != None:
+					event.ignore()
+				else:
+					return True
+			elif reply == QtGui.QMessageBox.Save:
+				self.save()
+				if event != None:
+					event.accept()
+				else:
+					return False
+		else:
+			if event != None:
+				event.accept()
+			else:
+				return False
 	def acquire(self):
 		#first: work out what measurement we're trying to run
 		#by finding which tabs are selected
@@ -693,7 +720,6 @@ class MapperProg(QtGui.QMainWindow):
 		self.fig.tight_layout()
 		self.canvas.draw()
 
-
 	def checkForGraph(self):
 		try:
 			self.canvas
@@ -803,7 +829,7 @@ class MapperProg(QtGui.QMainWindow):
 
 	def closeEvent(self,event):
 		setSettings(self.settings)
-		event.accept()
+		self.checkNeedsSaving(event)
 
 	def resizeEvent(self,event):
 		try:
