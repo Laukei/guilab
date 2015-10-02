@@ -228,6 +228,9 @@ class MapperProg(QtGui.QMainWindow):
 		
 		self.toolbar = self.addToolBar('Operations')
 		self.toolbar.setMovable(False)
+		self.toolbar.addAction(newAction)
+		self.toolbar.addAction(newSequentialAction)
+		self.toolbar.addSeparator()
 		self.toolbar.addAction(self.acquireAction)
 		self.toolbar.addAction(self.haltAction)
 		self.toolbar.addSeparator()
@@ -672,6 +675,7 @@ class MapperProg(QtGui.QMainWindow):
 		self.mapper_drone.ySteps.connect(self.getYSteps)
 		self.x_steps = None
 		self.y_steps = None
+		self.setNeedsSaving()
 		self.obj_thread.start()
 		#print 'launched'
 
@@ -752,13 +756,21 @@ class MapperProg(QtGui.QMainWindow):
 			self.filename = ''
 			self.setNewDataset([])
 			self.setDefaults()
+			self.meas_par = {}
 			self.setNeedsSaving(reset=True)
 			self.updateWindowTitle()
 			self.statusBar().showMessage('Begun new dataset')
 
 
-	def newSequential(self):
-		pass
+	def newSequential(self,save_already_checked=False):
+		if save_already_checked == True or self.checkNeedsSaving() == False:
+			self.filename = ''
+			self.setNewDataset([])
+			self.meas_par = {}
+			self.setNeedsSaving(reset=True)
+			self.dateandtime.setText('')
+			self.updateWindowTitle()
+			self.statusBar().showMessage('Begun next dataset')
 
 	def open(self):
 		self.filename_open, _ = QtGui.QFileDialog.getOpenFileName(self,'Open file...',self.settings['targetfolder'],"I-V data (*.txt);;All data (*.*)")
@@ -1632,7 +1644,7 @@ class MapperPlot(QtGui.QMainWindow):
 		self.panel_widget.vbox.addLayout(self.gridsection1)
 		self.panel_widget.vbox.addWidget(self.title_widget)
 		if self.meas_par != None and 'c' in self.meas_par['mtype']:
-			if self.pm['wavelength'] != '' and self.pm['power'] != 'Not measured' \
+			if self.pm['wavelength'] != '' and self.pm['laserpower'] != 'Not measured' \
 				and self.pm['atten'] != '' and self.pm['dcr']!= '':
 				self.panel_widget.vbox.addWidget(self.convert_to_sde)
 			else:
@@ -1882,7 +1894,7 @@ class MapperPlot(QtGui.QMainWindow):
 		if self.verbose_graph.isChecked():
 			self.textstr = ''
 			for key in sorted(self.pm.keys()):
-				if key in ['batchName','comment','dateandtime','readv_m','bias','temp','sma','username','deviceId','meas_par','atten','wavelength','power','dcr']:
+				if key in ['batchName','comment','dateandtime','readv_m','bias','temp','sma','username','deviceId','meas_par','atten','wavelength','laserpower','dcr']:
 					if key != 'meas_par':
 						self.textstr += str(key)+': '+str(self.pm[key])+'\n'
 					elif self.meas_par != None:
@@ -1916,7 +1928,7 @@ class MapperPlot(QtGui.QMainWindow):
 	def checkSde(self):
 		if self.convert_to_sde.isChecked() and self.convert_to_sde.isEnabled():
 			try:
-				self.lp = float(self.pm['power'].strip('dBm'))
+				self.lp = float(self.pm['laserpower'].strip('dBm'))
 				self.ta = float(self.pm['atten'])
 				self.la = float(self.pm['wavelength'])*1e-9
 				self.dc = float(self.pm['dcr'])
