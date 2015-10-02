@@ -753,22 +753,17 @@ class MapperProg(QtGui.QMainWindow):
 
 	def new(self,save_already_checked = False):
 		if save_already_checked == True or self.checkNeedsSaving() == False:
-			self.filename = ''
-			self.setNewDataset([])
 			self.setDefaults()
-			self.meas_par = {}
-			self.setNeedsSaving(reset=True)
-			self.updateWindowTitle()
-			self.statusBar().showMessage('Begun new dataset')
+			self.newSequential(True)
 
 
 	def newSequential(self,save_already_checked=False):
 		if save_already_checked == True or self.checkNeedsSaving() == False:
 			self.filename = ''
 			self.setNewDataset([])
-			self.meas_par = {}
-			self.setNeedsSaving(reset=True)
+			self.meas_par = None
 			self.dateandtime.setText('')
+			self.setNeedsSaving(reset=True)
 			self.updateWindowTitle()
 			self.statusBar().showMessage('Begun next dataset')
 
@@ -838,7 +833,10 @@ class MapperProg(QtGui.QMainWindow):
 			self.save()
 
 	def updateWindowTitle(self):
-		pass
+		if self.filename == '':
+			self.setWindowTitle(self.name_of_application + '[*]')
+		else:
+			self.setWindowTitle(self.name_of_application+' - '+os.path.basename(self.filename) + '[*]')
 
 	def halt(self):
 		self.haltAction.setEnabled(False)
@@ -930,7 +928,14 @@ class MapperProg(QtGui.QMainWindow):
 
 
 	def export(self):
-		pass
+		self.clipboard = QtGui.QApplication.clipboard()
+		self.clipboard_string = ''
+		for row in self.data:#
+			for col in row:
+				self.clipboard_string += str(col) +'\t'
+			self.clipboard_string = self.clipboard_string[:-1] +'\n'
+		self.clipboard.setText(self.clipboard_string[:-1])
+		self.statusBar().showMessage('Raw data copied to clipboard')
 
 	def openSettings(self):
 		self.settings_window = SettingsDialog(self.settings,movement.findClass(),measurement.findClass())
