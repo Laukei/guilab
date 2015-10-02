@@ -111,6 +111,14 @@ def setSettings(settings):
 	except IOError:
 		return False
 
+def convert_to_builtin_type(obj):
+	#from https://pymotw.com/2/json/
+	print 'default(', repr(obj), ')'
+	# Convert objects to a dictionary of their representation
+	d = { '__class__':obj.__class__.__name__, '__module__':obj.__module__}
+	d.update(obj.__dict__)
+	return d
+
 class MapperProg(QtGui.QMainWindow):
 	def __init__(self):
 		super(MapperProg,self).__init__()
@@ -125,6 +133,7 @@ class MapperProg(QtGui.QMainWindow):
 
 		#finalize things
 		self.filename = ''
+		self.data = []
 		self.settings = getSettings()
 		self.setDefaults()
 		self.name_of_application = 'Mapper'
@@ -517,6 +526,7 @@ class MapperProg(QtGui.QMainWindow):
 				event.accept()
 			else:
 				return False
+
 	def acquire(self):
 		#first: work out what measurement we're trying to run
 		#by finding which tabs are selected
@@ -662,13 +672,6 @@ class MapperProg(QtGui.QMainWindow):
 		self.mapper_drone.ySteps.connect(self.getYSteps)
 		self.x_steps = None
 		self.y_steps = None
-		if any(x in 'mM' for x in self.meas_par['mtype']):
-			self.ax.set_xlabel('X position (mm)')
-			self.ax.set_ylabel('Y position (mm)')
-		elif any(x in 's' for x in self.meas_par['mtype']):
-			self.ax.set_xlabel('X position (V)')
-			self.ax.set_ylabel('Y position (V)')
-
 		self.obj_thread.start()
 		#print 'launched'
 
@@ -685,6 +688,13 @@ class MapperProg(QtGui.QMainWindow):
 	def updatePreviewGrid(self):
 		plt.figure('preview')
 		self.data_array = np.array(self.data).transpose()
+		if any(x in 'mM' for x in self.meas_par['mtype']):
+			self.ax.set_xlabel('X position (mm)')
+			self.ax.set_ylabel('Y position (mm)')
+		elif any(x in 's' for x in self.meas_par['mtype']):
+			self.ax.set_xlabel('X position (V)')
+			self.ax.set_ylabel('Y position (V)')
+
 
 		self.extent = [self.data_array[0].min(), self.data_array[0].max(), self.data_array[1].min(),self.data_array[1].max()]
 		if self.x_steps != None:
@@ -737,19 +747,85 @@ class MapperProg(QtGui.QMainWindow):
 		self.haltAction.setEnabled(False)
 		self.acquireAction.setEnabled(True)
 
-	def new(self):
-		pass
+	def new(self,save_already_checked = False):
+		if save_already_checked == True or self.checkNeedsSaving() == False:
+			self.filename = ''
+			self.setNewDataset([])
+			self.setDefaults()
+			self.setNeedsSaving(reset=True)
+			self.updateWindowTitle()
+			self.statusBar().showMessage('Begun new dataset')
+
 
 	def newSequential(self):
 		pass
 
 	def open(self):
-		pass
+		self.filename_open, _ = QtGui.QFileDialog.getOpenFileName(self,'Open file...',self.settings['targetfolder'],"I-V data (*.txt);;All data (*.*)")
+		if self.checkNeedsSaving() == False:
+			if self.filename_open != '':
+				#self.new(True)
+				self.filename = self.filename_open
+				self.settings['targetfolder'] = self.filename
+				with open(self.filename,'r') as f:
+					try:
+						self.loaded_data = json.loads(f.read())
+					except ValueError as e:
+						self.statusBar().showMessage('Problem loading file '+str(self.filename))
+						reply = QtGui.QMessageBox.question(self,'Mapper', 'Problem loading '+str(self.filename)+':\n'+str(e),
+								QtGui.QMessageBox.Ok)
+						return
+				self.processMetadata(self.loaded_data['metadata'])
+				self.setNewDataset(self.loaded_data['data'])
+
+				try:
+					if 'mtype' in self.meas_par.keys():
+						if 'm' in self.meas_par['mtype'] or 'M' in self.meas_par['mtype']:
+							self.movement_tab.setCurrentWidget(self.motor_widget)
+						elif 's' in self.meas_par['mtype']:
+							self.movement_tab.setCurrentWidget(self.scanner_widget)
+						if 'c' in self.meas_par['mtype']:
+							self.measurement_tab.setCurrentWidget(self.count_widget)
+						elif 'r' in self.meas_par['mtype']:
+							self.measurement_tab.setCurrentWidget(self.reflec_widget)
+				except AttributeError:
+					pass
+
+
+				self.setNeedsSaving(reset=True)
+				self.statusBar().showMessage('Loaded '+str(self.filename))
+				self.updateWindowTitle()
+
+	def setNewDataset(self,data):
+		self.data = data
+		if self.data != []:
+			self.updatePreviewGrid()
+		else:
+			try:
+				self.img.set_data([[]])
+				self.img.set_extent([0,0.000001,0,0.000001])
+				self.canvas.draw()
+			except AttributeError:
+				pass
 
 	def save(self):
-		pass
+		if self.filename == '':
+			self.saveAs()
+		else:
+			with open(self.filename,'w') as f:
+				f.write(json.dumps({'metadata':self.processMetadata(),'data':self.data},default=convert_to_builtin_type))
+			self.statusBar().showMessage('Saved to '+str(self.filename))
+			self.updateWindowTitle()
+			self.setNeedsSaving(reset=True)
+
 
 	def saveAs(self):
+		self.filename, _ = QtGui.QFileDialog.getSaveFileName(self,'Save as...',self.settings['targetfolder'],"Mapper data (*.txt);;All data (*.*)")
+		if self.filename != '':
+			self.folder_for_dialogs = self.filename
+			self.save()
+
+	def updateWindowTitle(self):
 		pass
 
 	def halt(self):
@@ -763,54 +839,82 @@ class MapperProg(QtGui.QMainWindow):
 		self.plotWindow.hide()
 		self.plotWindow.show()
 
-	def processMetadata(self):
+	def processMetadata(self,source=None):
 		#bundles values in the plotter screen for display in plotter and saving/loading
-		self.appstate = {
-			'username':self.username.text(),
-			'dateandtime':self.dateandtime.text(),
-			'batchName':self.batchName.text(),
-			'deviceId':self.deviceId.text(),
-			'sma':self.sma.text(),
-			'manualtemp':self.manualtemp.isChecked(),
-			'temp':self.temp.text(),
-			'comment':self.comment.text(),
-			'manualbias':self.manualbias.isChecked(),
-			'bias':self.bias.text(),
-			'manualatten':self.manualatten.isChecked(),
-			'atten':self.atten.text(),
-			'wavelength':self.wavelength.text(),
-			'power':self.laserpower.text(),
-			'dcr':self.dcr.text(),
-			'xfrom_m':self.xfrom_m.text(),
-			'xto_m':self.xto_m.text(),
-			'yfrom_m':self.yfrom_m.text(),
-			'yto_m':self.yto_m.text(),
-			'volt_m':self.volt_m.text(),
-			'freq_m':self.freq_m.text(),
-			'readv_m':self.readv_m.text(),
-			'clicks_m':self.clicks_m.text(),
-			'numpoints_m':self.numpoints_m.text(),
-			'closedloop_m':self.closedloop_m.isChecked(),
-			'xfrom_s':self.xfrom_s.text(),
-			'xto_s':self.xto_s.text(),
-			'yfrom_s':self.yfrom_s.text(),
-			'yto_s':self.yto_s.text(),
-			'xvoltstep_s':self.xvoltstep_s.text(),
-			'yvoltstep_s':self.yvoltstep_s.text(),
-			'meastime_c':self.meastime_c.text(),
-			'pausetime_c':self.pausetime_c.text(),
-			'meastime_r':self.meastime_r.text(),
-			'pausetime_r':self.pausetime_r.text()
-			}
-		try:
-			self.appstate['meas_par']=self.meas_par
-			self.appstate['x_steps']=self.x_steps
-			self.appstate['y_steps']=self.y_steps
-			self.appstate['x_forward']=self.x_forward
-			self.appstate['y_forward']=self.y_forward
-		except AttributeError:
-			self.appstate['meas_par']=None
-		return self.appstate
+		if source != None:
+			for key in source.keys():
+				if key not in ['meas_par','x_steps','y_steps','x_forward','y_forward']:
+					if isinstance(self.key_object_map[key],QtGui.QLineEdit):
+						self.key_object_map[key].setText(source[key])
+					if isinstance(self.key_object_map[key],QtGui.QCheckBox):
+						self.key_object_map[key].setChecked(source[key])
+					if isinstance(self.key_object_map[key],QtGui.QSpinBox) or isinstance(self.key_object_map[key],QtGui.QDoubleSpinBox):
+						if key == 'laserpower':
+							if source[key] == 'Not measured':
+								self.key_object_map[key].setValue(-float('inf'))
+							else:
+								self.key_object_map[key].setValue(float(source[key].strip('dBm')))
+
+						else:
+							self.key_object_map[key].setValue(float(source[key]))
+			try:
+				self.meas_par = source['meas_par']
+				self.x_steps = source['x_steps']
+				self.y_steps = source['y_steps']
+				self.x_forward = source['x_forward']
+				self.y_forward = source['y_forward']
+			except KeyError:
+				self.meas_par = {}
+				del self.meas_par
+
+		else:
+			self.appstate = {
+				'username':self.username.text(),
+				'dateandtime':self.dateandtime.text(),
+				'batchName':self.batchName.text(),
+				'deviceId':self.deviceId.text(),
+				'sma':self.sma.text(),
+				'manualtemp':self.manualtemp.isChecked(),
+				'temp':self.temp.text(),
+				'comment':self.comment.text(),
+				'manualbias':self.manualbias.isChecked(),
+				'bias':self.bias.text(),
+				'manualatten':self.manualatten.isChecked(),
+				'atten':self.atten.text(),
+				'wavelength':self.wavelength.text(),
+				'laserpower':self.laserpower.text(),
+				'dcr':self.dcr.text(),
+				'xfrom_m':self.xfrom_m.text(),
+				'xto_m':self.xto_m.text(),
+				'yfrom_m':self.yfrom_m.text(),
+				'yto_m':self.yto_m.text(),
+				'volt_m':self.volt_m.text(),
+				'freq_m':self.freq_m.text(),
+				'readv_m':self.readv_m.text(),
+				'clicks_m':self.clicks_m.text(),
+				'numpoints_m':self.numpoints_m.text(),
+				'closedloop_m':self.closedloop_m.isChecked(),
+				'xfrom_s':self.xfrom_s.text(),
+				'xto_s':self.xto_s.text(),
+				'yfrom_s':self.yfrom_s.text(),
+				'yto_s':self.yto_s.text(),
+				'xvoltstep_s':self.xvoltstep_s.text(),
+				'yvoltstep_s':self.yvoltstep_s.text(),
+				'meastime_c':self.meastime_c.text(),
+				'pausetime_c':self.pausetime_c.text(),
+				'meastime_r':self.meastime_r.text(),
+				'pausetime_r':self.pausetime_r.text()
+				}
+
+			try:
+				self.appstate['meas_par']=self.meas_par
+				self.appstate['x_steps']=self.x_steps
+				self.appstate['y_steps']=self.y_steps
+				self.appstate['x_forward']=self.x_forward
+				self.appstate['y_forward']=self.y_forward
+			except AttributeError:
+				self.appstate['meas_par']=None
+			return self.appstate
 
 
 	def export(self):
@@ -1784,7 +1888,10 @@ class MapperPlot(QtGui.QMainWindow):
 					elif self.meas_par != None:
 						for key2 in sorted(self.pm['meas_par'].keys()):
 							if key2 in ['measurer','mover']:
-								self.textstr += str(key2)+': '+str(self.pm[key][key2].__class__.__name__)+'\n'
+								if type(self.pm[key][key2])!=dict:
+									self.textstr += str(key2)+': '+str(self.pm[key][key2].__class__.__name__)+'\n'
+								else:
+									self.textstr += str(key2)+': '+str(self.pm[key][key2]['__class__'])+'\n'
 							else:
 								self.textstr += str(key2)+': '+str(self.pm[key][key2])+'\n'
 			self.text_on_graph = self.ax.text(0.01, 0.99, self.textstr[:-1], transform = self.ax.transAxes, fontsize = 9,
