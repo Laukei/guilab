@@ -124,6 +124,7 @@ class MapperProg(QtGui.QMainWindow):
 		super(MapperProg,self).__init__()
 		self.initUI()
 
+	aboutToQuit = QtCore.Signal()
 
 	def initUI(self):
 		#create UI; maybe use lists? dicts? something more elegant!
@@ -533,6 +534,12 @@ class MapperProg(QtGui.QMainWindow):
 	def acquire(self):
 		#first: work out what measurement we're trying to run
 		#by finding which tabs are selected
+		if self.data != []:
+			reply = QtGui.QMessageBox.question(self,'Mapper',
+				'Overwrite existing dataset?',QtGui.QMessageBox.Ok | QtGui.QMessageBox.Cancel, QtGui.QMessageBox.Cancel)
+			if reply == QtGui.QMessageBox.Cancel:
+				self.statusBar().showMessage('Measurement cancelled')
+				return
 		self.meas_par = {}
 		self.data = []
 		self.colorbar_max = -float('inf')
@@ -943,14 +950,24 @@ class MapperProg(QtGui.QMainWindow):
 
 
 	def helpFile(self):
-		pass
+		self.helpWindow = HelpWindow()
+		#self.helpWindow.setWindowModality(QtCore.Qt.WindowModality.ApplicationModal)
+		self.helpWindow.hide()
+		self.aboutToQuit.connect(self.helpWindow.close)
+		self.helpWindow.show()
 
 	def aboutProgram(self):
-		pass
+		self.aboutBox = QtGui.QMessageBox()
+		self.aboutBox.setText("<b>Mapper</b>")
+		self.aboutBox.setInformativeText("Written by Rob Heath (rob@robheath.me.uk) at the University of Glasgow in 2015")
+		self.aboutBox.setIcon(QtGui.QMessageBox.Information)
+		self.aboutBox.setWindowTitle('About program')
+		self.aboutBox.exec_()
 
 	def closeEvent(self,event):
 		setSettings(self.settings)
 		self.checkNeedsSaving(event)
+		self.aboutToQuit.emit()
 
 	def resizeEvent(self,event):
 		try:
@@ -1437,6 +1454,7 @@ class SettingsDialog(QtGui.QDialog):
 		self.createLayoutsAndWidgets()
 		self.populateLayoutsAndSetDefaults()
 		self.setWindowTitle('Settings')
+		self.setWindowIcon(QtGui.QIcon(r'icons\settings.png'))
 		self.resize(500,500)
 
 	def createLayoutsAndWidgets(self):
@@ -1981,6 +1999,20 @@ class MapperPlot(QtGui.QMainWindow):
 		self.fig.clear()
 		event.accept()
 
+class HelpWindow(QtGui.QWidget):
+	def __init__(self):
+		super(HelpWindow,self).__init__()
+		self.view = QtWebKit.QWebView(self)
+		self.view.load('help\help.html')
+		
+		self.layout = QtGui.QHBoxLayout()
+		self.layout.addWidget(self.view)
+
+		self.setLayout(self.layout)
+		self.resize(800,600)
+		self.setWindowTitle('Mapper help')
+		self.setWindowIcon(QtGui.QIcon(r'icons\help.png'))
+		self.show()
 
 def main():
 	app = QtGui.QApplication(sys.argv)
