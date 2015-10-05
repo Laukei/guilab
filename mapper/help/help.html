@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html>
+   <head>
+    <title>Mapper help</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="bootstrap.min.css" rel="stylesheet" media="screen">
+   </head>
+   <body>
+    <div class="container">
+
+      <h1><a name="top"></a>Mapper <small>Help file</small></h1>
+      <ul class ="list-inline">
+      <li><a href="#taking"><h4>Taking data</a></h4></li>
+      <li><a href="#plotting"><h4>Plotting data</a></h4></li>
+      <li><a href="#settings"><h4>Settings</a></h4></li>
+      </ul>
+
+      <h3><a name="taking">Taking data</a></h3>
+
+      <div class="center-block">
+        <img src='mapper.png' class="center-block img-responsive img-rounded">
+        <div class="text-center"><p>The Mapper main GUI</p></div>
+      </div>
+
+      <p>Taking data is the core function of Mapper. It assumes you have access to <strong>scanners and/or motors</strong>, and a <strong>photon counter and/or power meter</strong> for reflected signal. It can also read the operating temperature and bias voltage from a <strong>Stanford Research Systems SIM900</strong> with <strong>SIM928</strong> voltage source and <strong>SIM922</strong> thermometer modules, and can read the attenuation and wavelength from <strong>two attenuators</strong>. These values may also be manually specified. For more information see <a href="#settings">Settings</a>.</p>
+
+      <p>With a full complement of attached devices, Mapper can perform <strong>three types of movement</strong> (open-loop and closed-loop motor movement, and open-loop scanner movement) and <strong>two types of measurement</strong> (count rate and reflected power). The type of measurement performed is determined by which tabs are selected in the main window. No metadata is vital, though some will be automatically retrieved if the setting is not 'Manual'. The following table details all of the values, <span class='text-info'>blue indicating the value may be autopopulated</span>.</p>
+
+      <div>
+      <table class="table table-striped table-condensed">
+      <thead>
+      <tr>
+        <td><strong>Type</strong></td>
+        <td><strong>Name</strong></td>
+        <td><strong>Description</strong></td>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+        <td>Metadata</td>
+        <td><strong>User</strong></td>
+        <td>The name of the person running the measurement</td>
+      </tr>
+      <tr class="info">
+        <td>Metadata</td>
+        <td><strong>At</strong></td>
+        <td>The date and time the measurement was run</td>
+      </tr>
+      <tr>
+        <td>Metadata</td>
+        <td><strong>Batch</strong></td>
+        <td>The batch the device is from</td>
+      </tr>
+      <tr>
+        <td>Metadata</td>
+        <td><strong>Device</strong></td>
+        <td>The device name</td>
+      </tr>
+      <tr>
+        <td>Metadata</td>
+        <td><strong>SMA</strong></td>
+        <td>The SMA connector being used</td>
+      </tr>
+      <tr class="info">
+        <td>Metadata</td>
+        <td><strong>Temp</strong></td>
+        <td>The temperature the device is operating at</td>
+      </tr>
+      <tr>
+        <td>Metadata</td>
+        <td><strong>Comments</strong></td>
+        <td>Comments about the device or measurement</td>
+      </tr>
+      <tr class="info">
+        <td>Metadata</td>
+        <td><strong>Bias</strong></td>
+        <td>The device's bias point (in volts)</td>
+      </tr>
+      <tr>
+        <td>Metadata</td>
+        <td><strong>Laser power</strong></td>
+        <td>The input laser power to the device in dBm</td>
+      </tr>
+      <tr class="info">
+        <td>Metadata</td>
+        <td><strong>Atten</strong></td>
+        <td>The attenuation applied to the device</td>
+      </tr>
+      <tr>
+        <td>Metadata</td>
+        <td><strong>DCR</strong></td>
+        <td>The dark-count rate of the device in cps</td>
+      </tr>
+      <tr class="info">
+        <td>Metadata</td>
+        <td><strong>Lambda</strong></td>
+        <td>The wavelength of incident light</td>
+      </tr>
+      <tr>
+        <td>Motor</td>
+        <td><strong>X range</strong></td>
+        <td>Range to move over (from->to, can be low->high or high->low) in mm</td>
+      </tr>
+      <tr>
+        <td>Motor</td>
+        <td><strong>Y range</strong></td>
+        <td>Range to move over (from->to, can be low->high or high->low) in mm</td>
+      </tr>
+      <tr>
+        <td>Motor (open loop)</td>
+        <td><strong>Volt</strong></td>
+        <td>The voltage to use when moving the motor</td>
+      </tr>
+      <tr>
+        <td>Motor (open loop)</td>
+        <td><strong>Freq</strong></td>
+        <td>The frequency to use when moving the motor</td>
+      </tr>
+      <tr>
+        <td>Motor (open loop)</td>
+        <td><strong>Clicks</strong></td>
+        <td>The number of times to pulse when moving the motor (forms ratio with Freq such that <strong>Clicks/Freq</strong> = seconds required to perform the movement)</td>
+      </tr>
+      <tr>
+        <td>Motor</td>
+        <td><strong>V<sub>read</sub></strong></td>
+        <td>The read voltage for the motors (generally unused parameter)</td>
+      </tr>
+      <tr>
+        <td>Motor</td>
+        <td><strong>Closed-loop</strong></td>
+        <td>Toggle ON to set closed-loop movement mode (reads position and evenly-spaces measurements), toggle OFF to set open-loop movement mode (runs <emph>n</emph> measurements until target reached)</td>
+      </tr>
+      <tr>
+        <td>Motor (closed loop)</td>
+        <td><strong>Points</strong></td>
+        <td>Number of points between from->to values of X and Y to measure</td>
+      </tr>
+      <tr>
+        <td>Scanner</td>
+        <td><strong>X range</strong></td>
+        <td>Range to move over (from->to, can be low->high or high->low) in volts</td>
+      </tr>
+      <tr>
+        <td>Scanner</td>
+        <td><strong>Y range</strong></td>
+        <td>Range to move over (from->to, can be low->high or high->low) in volts</td>
+      </tr>
+      <tr>
+        <td>Scanner</td>
+        <td><strong>X step</strong></td>
+        <td>Size of steps in X axis in volts</td>
+      </tr>
+      <tr>
+        <td>Scanner</td>
+        <td><strong>Y step</strong></td>
+        <td>Size of steps in Y axis in volts</td>
+      </tr>
+      <tr>
+        <td>Reflection</td>
+        <td><strong>T<sub>meas</sub></strong></td>
+        <td>Measurement time in seconds</td>
+      </tr>
+      <tr>
+        <td>Reflection</td>
+        <td><strong>T<sub>pause</sub></strong></td>
+        <td>Pause time in seconds</td>
+      </tr>
+      <tr>
+        <td>Counts</td>
+        <td><strong>T<sub>meas</sub></strong></td>
+        <td>Measurement time in seconds</td>
+      </tr>
+      <tr>
+        <td>Counts</td>
+        <td><strong>T<sub>pause</sub></strong></td>
+        <td>Pause time in seconds</td>
+      </tr>
+      </tbody>
+      </table>
+      </div>
+
+      <p>Once acceptable values have been input, the green "Run" button on the toolbar will begin the measurement. If the measurement needs to be aborted, the red "Halt" button (which illuminates when running a measurement) allows this.</p>
+
+      <p>Once the data has been acquired (or during the measurement with partial data), the data may be passed to the Plotter tool by clicking the <strong>Plot</strong> button in the toolbar. Data will still continue to be taken if the measurement is not finished, but the Plotter will not update with it unless the graph type is changed, to prevent excessive replotting. For more information see <a href="#plotting">Plotting data</a>.</p>
+
+      <p><strong class="text-danger">Data acquired through the Mapper is not automatically saved</strong>. However, the program will not exit without prompting to save. The data is saved in JSON format, which will not import gracefully into most programs. <strong>To obtain tab-separated data for use in other software, export the data, or save it to a text file via the Plotter</strong>.</p>
+
+      <p>If, after taking a dataset, further data is to be obtained from a similar setup, the <strong>New (sequential)</strong> option may be used from the <strong>File</strong> menu. This preserves the metadata used, but scraps the acquired data and will not automatically save over the file.</p>
+
+      <p>Data may be loaded into the program using the <strong>Open</strong> option from the <strong>File</strong> menu. The data may then be amended or passed to the Plotter.</p>
+
+      <a href="#top">Back to top</a>
+
+      <h3><a name="plotting">Plotting data</a></h3>
+
+      <div class="center-block">
+        <img src='mapperplot.png' class="img-responsive center-block img-rounded">
+        <p class="text-center">The Mapper Plotter GUI showing a Filled contour SDE plot with datapoints</p>
+      </div>
+      <p>The Mapper Plotter is designed to allow rapid, publication-quality, customisable plotting of maps of a device. The Plotter includes logic to convert count rates to <strong>system detection efficiency (SDE)</strong> if the metadata inludes <strong>laser power</strong>, <strong>attenuation</strong>, <strong>wavelength</strong> and <strong>dark-count rate (DCR)</strong>. The Plotter loads its defaults from the Mapper's <a href="#settings">Settings</a>.</p>
+
+      <p>The Plotter is comprised of a preview pane on the left-hand side and the control pane on the right-hand side. The preview is the image that is saved when the <strong>Export</strong> button, bottom right, is pressed. The control pane values can be returned to the defaults by pressing <strong>Reset</strong>. The Plotter may be closed unceremoniously by pressing <strong>Close</strong>.</p>
+
+      <p>Many of the options in the control pane are self-explanatory. <strong>Graph title</strong> adds a graph title: a title is suggested automatically, but may be customised using the <strong>Title</strong> box, which accepts some LaTeX between $ signs (for example, Greek letters). <strong>Convert to SDE</strong> converts measurements of counts to efficiency (%) and is enabled only when measurement type and metadata are sufficient. <strong>Verbose graph</strong> overlays the plot with measurement parameters, while <strong>Manual axes</strong> allows the graph's limits to be manually altered.</p>
+
+      <p>There are three types of plot: <strong>Filled contour</strong> and <strong>Contour</strong>, which plot using X-Y positions and interpolate intermediate data using Delaunay triangulation, and <strong>Grid</strong> which puts data into a uniform grid between the mininmum and maximum values measured. Contour-type plots may have the datapoints displayed or hidden using <strong>Show datapoints</strong> checkbox.
+
+      <p>For conversion of counts to SDE, the <strong>Convert to SDE</strong> checkbox must be enabled. The operations this then performs are:
+      <ol>
+      <li>Calculate the input laser power in watts as 0.001*(10.0<sup>(<var>laserpowerindBm</var>-<var>attenauationindB</var>)/10.0</sup>)</li>
+      <li>Calculate the energy of a single photon as (6.626070040e-34*299792458.0)/(<var>wavelengthinnm*1e-9</var>)</li>
+      <li>Calculate a scaling factor to percent for each measurement value of 100*<var>photonenergy</var>/<var>inputlaserpower</var>
+      <li>For each datapoint, subtract the dark-count rate, capping at 0 cps</li>
+      <li>For each datapoint, multiply by the scaling factor</li>
+      </ol>
+
+      This subsequently calculates the system detection efficiency matching those parameters.
+      </p>
+
+      <p>Finally, the export settings set the <strong>Width</strong> and <strong>Height</strong> of the plot, and <strong>DPI</strong> the dots-per-inch resolution. The units for the width and height may be converted to centimetres (cm) or pixels (px) if these are more helpful.</p>
+
+      <p>All of the control pane values are reset to defaults when the Plotter is closed.</p>
+
+      <a href="#top">Back to top</a>
+
+      <h3><a name="settings">Settings</a></h3>
+
+      <p>The <a href="#device">Device settings</a> and <a href="#other">other settings</a> for the Mapper are accessed from the <strong>Settings</strong> menu. They are preserved between sessions, and are saved to disk on close.</p>
+
+      <h4><a name="device">Device settings</a></h4>
+
+      <div class="center-block">
+        <img src='devicesettings.png' class="img-responsive center-block img-rounded">
+        <p class="text-center">Mapper's device settings</p>
+      </div>
+
+
+      <p>Mapper's <strong>device settings</strong> are absolutely vital and core to the operation of the system. <strong class='text-danger'>The program will behave in horrible and unexpected ways if these settings are wrong</strong>. Core to the operation are correct selection of the <strong>Mover</strong> types (Scanner and Motor) and <strong>Measurer</strong> types (Counter and Reflection). The <strong>SIM900</strong> modules and channels may be omitted if manual temperature values are entered into the program. This is also true for the <strong>Attenuator addresses</strong>.</p>
+
+
+      <h4><a name="other">Other settings</a></h4>
+
+      <p>Mapper's <strong>other settings</strong> allow for every value in the program to be tweaked and changed. The settings are loaded when the program is launched or when the <strong>New</strong> or <strong>New (sequential)</strong> buttons are pressed.</p>
+
+
+      <a href="#top">Back to top</a>
+    </div>
+   </body>
+</html>

@@ -512,24 +512,20 @@ class MapperProg(QtGui.QMainWindow):
 			if reply == QtGui.QMessageBox.Discard:
 				if event != None:
 					event.accept()
-				else:
-					return False
+				return False
 			elif reply == QtGui.QMessageBox.Cancel:
 				if event != None:
 					event.ignore()
-				else:
-					return True
+				return True
 			elif reply == QtGui.QMessageBox.Save:
 				self.save()
 				if event != None:
 					event.accept()
-				else:
-					return False
+				return False
 		else:
 			if event != None:
 				event.accept()
-			else:
-				return False
+			return False
 
 	def acquire(self):
 		#first: work out what measurement we're trying to run
@@ -966,8 +962,8 @@ class MapperProg(QtGui.QMainWindow):
 
 	def closeEvent(self,event):
 		setSettings(self.settings)
-		self.checkNeedsSaving(event)
-		self.aboutToQuit.emit()
+		if self.checkNeedsSaving(event) == False:
+			self.aboutToQuit.emit()
 
 	def resizeEvent(self,event):
 		try:
