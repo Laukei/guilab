@@ -483,7 +483,7 @@ class IVProg(QtGui.QMainWindow):
 			self.replot()
 			self.setNoNeedSaving()
 			self.updateWindowTitle()
-			self.statusBar().showMessage('NO YOU FOOL! REINITIALISE VALUES!')
+			self.statusBar().showMessage('New dataset')
 
 	def newSequential(self,save_already_checked=False):
 		if save_already_checked == True or self.checkNeedsSaving()== False:
