@@ -308,7 +308,6 @@ class MapperProg(QtGui.QMainWindow):
 		self.atten = QtGui.QLineEdit('')
 		self.wavelength = QtGui.QLineEdit('')
 		self.dcr = QtGui.QLineEdit('')
-		print 'Still to add: metadata saved/loaded/passed to the settings-defaults thing...'
 
 		self.dateandtime.setEnabled(False)
 		self.manualtemp.stateChanged.connect(self.temp.setEnabled)
@@ -975,6 +974,99 @@ class MapperProg(QtGui.QMainWindow):
 			pass
 		event.accept()
 
+class MapperTool(QtGui.QMainWindow):
+	def __init__(self):
+		super(MapperTool,self).__init__()
+		self.initUI()
+	aboutToQuit = QtCore.Signal()
+
+
+	def initUI(self):
+		#create UI; maybe use lists? dicts? something more elegant!
+		self.createLayoutsAndWidgets()
+		self.populateLayouts()
+
+		#finalize things
+		self.data = []
+		self.setWindowTitle('Mapper Tools')
+		self.setWindowIcon(QtGui.QIcon(r'icons\mapper.png'))
+		self.statusBar().showMessage('Ready...')
+		self.show()
+
+	def createLayoutsAndWidgets(self):
+		self.tool_grid = QtGui.QGridLayout()
+		self.tool_widget = QtGui.QGroupBox('Move to')
+
+		self.scan_grid = QtGui.QGridLayout()
+		self.scan_widget = QtGui.QGroupBox('Continous reflection')
+
+		for grid, widget in [[self.tool_grid, self.tool_widget],
+							 [self.scan_grid, self.scan_widget]]:
+			layout = QtGui.QVBoxLayout()
+			layout.addLayout(grid)
+			widget.setLayout(layout)
+			widget.setFixedWidth(250)
+	
+		self.checkForGraph() #does the graph
+
+		self.hbox = QtGui.QHBoxLayout()
+		self.vbox = QtGui.QVBoxLayout()
+		self.vbox.addWidget(self.tool_widget)
+		self.vbox.addWidget(self.scan_widget)
+		self.vbox.addStretch(1)
+		self.hbox.addLayout(self.vbox)
+		self.hbox.addWidget(self.canvas)
+		self.canvas.setSizePolicy(QtGui.QSizePolicy(QtGui.QSizePolicy.Expanding,QtGui.QSizePolicy.Expanding))
+
+		self.main_widget = QtGui.QWidget()
+		self.main_widget.setLayout(self.hbox)
+		self.setCentralWidget(self.main_widget)
+
+	def populateLayouts(self):
+		self.x_m = QtGui.QLineEdit('')
+		self.y_m = QtGui.QLineEdit('')
+		self.move = QtGui.QPushButton('Go')
+
+		self.tool_grid.addWidget(QtGui.QLabel('X:'),0,0)
+		self.tool_grid.addWidget(self.x_m,0,1)
+		self.tool_grid.addWidget(QtGui.QLabel('Y:'),0,2)
+		self.tool_grid.addWidget(self.y_m,0,3)
+		self.tool_grid.addWidget(self.move,1,0,1,4)
+
+		#populate scanner grid
+		self.xfrom_s = QtGui.QLineEdit('')
+		self.xto_s = QtGui.QLineEdit('')
+		self.yfrom_s = QtGui.QLineEdit('')
+		self.yto_s = QtGui.QLineEdit('')
+		self.xvoltstep_s = QtGui.QLineEdit('')
+		self.yvoltstep_s = QtGui.QLineEdit('')
+		self.scan = QtGui.QPushButton('Run')
+
+		self.scan_grid.addWidget(QtGui.QLabel('X range:'),1,0)
+		self.scan_grid.addWidget(self.xfrom_s,1,1)
+		self.scan_grid.addWidget(QtGui.QLabel('->'),1,2)
+		self.scan_grid.addWidget(self.xto_s,1,3)
+		self.scan_grid.addWidget(QtGui.QLabel('Y range:'),2,0)
+		self.scan_grid.addWidget(self.yfrom_s,2,1)
+		self.scan_grid.addWidget(QtGui.QLabel('->'),2,2)
+		self.scan_grid.addWidget(self.yto_s,2,3)
+
+		self.scan_grid.addWidget(QtGui.QLabel('X step:'),3,0)
+		self.scan_grid.addWidget(self.xvoltstep_s,3,1)
+		self.scan_grid.addWidget(QtGui.QLabel('Y step:'),3,2)
+		self.scan_grid.addWidget(self.yvoltstep_s,3,3)
+
+		self.scan_grid.addWidget(self.scan,4,0,1,4)
+
+	def checkForGraph(self):
+		try:
+			self.canvas
+		except AttributeError:
+			self.data = np.array([[]])
+			self.fig = plt.figure('preview',figsize = (4.5,4), dpi=72, facecolor=(1,1,1), edgecolor=(0,0,0))
+			self.ax = self.fig.add_subplot(1,1,1)
+			self.canvas = FigureCanvas(self.fig)
+			self.fig.tight_layout()
 
 class MapperDrone(QtCore.QObject):
 	def __init__(self,meas_par):
@@ -1099,7 +1191,6 @@ class MapperDrone(QtCore.QObject):
 		elif 'c' in self.meas_par['mtype']:
 			self.measurer.setDefaults(	self.meas_par['tm'],
 										self.meas_par['tp'])
-
 		
 class SettingsDialog(QtGui.QDialog):
 	def __init__(self,settings,movers,measurers):
@@ -1984,6 +2075,13 @@ class MapperPlot(QtGui.QMainWindow):
 				plt.savefig(self.filename,dpi=float(self.dpi.text()))
 			else:
 				with open(self.filename,'w') as f:
+					self.data_for_export = self.data
+					if self.checkSde() != False:
+						for r, row in enumerate(self.data_for_export):
+							self.data_for_export[r][4] -= self.dc
+							if self.data_for_export[r][4] < 0:
+								self.data_for_export[r][4] == 0.0
+							self.data_for_export[r][4] *= self.scaling_factor
 					self.csvfile = csv.writer(f,delimiter = ',')
 					self.csvfile.writerows(list(np.array(self.data)))
 			self.statusBar().showMessage('Graph data saved to: '+str(self.filename))
