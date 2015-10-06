@@ -36,6 +36,7 @@ class Measurer:
 	
 class UniversalCounter(Measurer):
 	devicetype = 'c'
+	tests = {'c':  [[['tp','tm'],[0,2],'Time(s) out of bounds']]}
 	def __init__(self,address='GPIB0::3'):
 		try:
 			self.rm = visa.ResourceManager()
@@ -61,6 +62,7 @@ class UniversalCounter(Measurer):
 
 class LockIn(Measurer):
 	devicetype = 'r'
+	tests = {'r':  [[['tp','tm'],[0,2],'Time(s) out of bounds']]}
 	def __init__(self,address='GPIB0::16'):
 		try:
 			self.rm = visa.ResourceManager()
@@ -82,6 +84,7 @@ class LockIn(Measurer):
 		self.device.close()
 
 class FakeLockIn(Measurer):
+	tests = {'r':  [[['tp','tm'],[0,2],'Time(s) out of bounds']]}
 	devicetype = 'r'
 	def setDefaults(self,meastime,pausetime):
 		self.meastime = meastime
@@ -95,6 +98,7 @@ class FakeLockIn(Measurer):
 
 class FakeCounter(Measurer):
 	devicetype = 'c'
+	tests = {'c':  [[['tp','tm'],[0,2],'Time(s) out of bounds']]}
 	def setDefaults(self,meastime,pausetime):
 		self.meastime = meastime
 		self.pausetime = pausetime

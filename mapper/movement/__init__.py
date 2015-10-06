@@ -47,6 +47,15 @@ class FakeMotor(Mover):
 	def __init__(self):
 		self.pos = {'x':2.5, 'y':2.5, 'z':2.5}
 	devicetype = 'Mm'
+	tests = {'m':	[[['xt','xf','yf','yt'],[0,5],'X/Y range(s) out of bounds'],
+							[['v'],[0.01,70],'Voltage out of bounds'],
+							[['f'],[1,1000],'Frequency out of bounds'],
+							[['vr'],[0,2],'Readout voltage out of bounds'],
+							[['c'],[1,1000],'Clicks out of bounds']],
+			  'M':	[[['xt','xf','yf','yt'],[0,5],'X/Y range(s) out of bounds'],
+							[['vr'],[0,2],'Readout voltage out of bounds'],
+							[['n'],[2,1000],'Number of points out of bounds']]
+				}
 
 	def setDefaults(self,voltage,frequency,clicks,readvoltage):
 		self.voltage = voltage
@@ -86,13 +95,22 @@ class ANC300ARC200Motor(Mover):
 		self.device = SmartStage(*addresses)
 		self.pos = self.device.ARC200.position
 	devicetype = 'Mm'
+	tests = {'m':	[[['xt','xf','yf','yt'],[0,5],'X/Y range(s) out of bounds'],
+							[['v'],[0.01,70],'Voltage out of bounds'],
+							[['f'],[1,1000],'Frequency out of bounds'],
+							[['vr'],[0,2],'Readout voltage out of bounds'],
+							[['c'],[1,1000],'Clicks out of bounds']],
+			  'M':	[[['xt','xf','yf','yt'],[0,5],'X/Y range(s) out of bounds'],
+							[['vr'],[0,2],'Readout voltage out of bounds'],
+							[['n'],[2,1000],'Number of points out of bounds']]
+				}
 
 	def setDefaults(self,voltage,frequency,clicks,readvoltage):
 		self.voltage = voltage
 		self.frequency = frequency
 		for key in ['x','y']:
 			self.device.ANC300.set_voltage(key,voltage)
-			self.device.ANC300.set_frequency(key,voltage)
+			self.device.ANC300.set_frequency(key,frequency)
 		self.clicks = int(clicks)
 		self.readvoltage = readvoltage #ARC200
 		print 'readvoltage not used'
@@ -101,8 +119,10 @@ class ANC300ARC200Motor(Mover):
 		self.readvoltage = readvoltage
 		print 'readvoltage not used'
 		self.frequency = frequency
+		self.voltage = 60
 		for key in ['x','y']:
-			self.device.ANC300.set_frequency(key,voltage)
+			self.device.ANC300.set_voltage(key,60)
+			self.device.ANC300.set_frequency(key,200)
 
 
 	def getPos(self,axis=None):
@@ -120,7 +140,11 @@ class ANC300ARC200Motor(Mover):
 		return True
 
 	def moveTo(self,axis,position):
-		self.device.move_to(axis,position)
+		self.device.ANC300.set_voltage(axis,60)
+		self.device.ANC300.set_frequency(axis,200)
+		self.device.move_to(axis,position,100)
+		self.device.ANC300.set_voltage(axis,self.voltage)
+		self.device.ANC300.set_frequency(axis,self.frequency)
 		return True
 
 	def close(self):
@@ -128,12 +152,15 @@ class ANC300ARC200Motor(Mover):
 		self.device.close()
 
 class LNAScanner(Mover):
-	devicetype = 's'
 	def __init__(self,address='GPIB0::16'):
 		self.device = LockIn(address)
 		self.pos = {'x':self.device.query('DAC. '+str(self.device.aidmap['x'])),
 					'y':self.device.query('DAC. '+str(self.device.aidmap['y']))}
 
+	devicetype = 's'
+	tests = {'s':	[[['xt','xf','yf','yt'],[0,10],'X/Y range(s) out of bounds'],
+					  		[['xv','yv'],[0,1],'X/Y step size out of bounds']]}
+					  		
 	def setDefaults(self,stepx,stepy):
 		self.stepdict = {'x':stepx,'y':stepy}
 
@@ -165,6 +192,8 @@ class FakeScanner(Mover):
 	def __init__(self):
 		self.pos = {'x':0,'y':0}
 	devicetype = 's'
+	tests = {'s':	[[['xt','xf','yf','yt'],[0,10],'X/Y range(s) out of bounds'],
+					  		[['xv','yv'],[0,1],'X/Y step size out of bounds']]}
 
 	def setDefaults(self,stepx,stepy):
 		self.stepdict = {'x':stepx,'y':stepy}

@@ -7,6 +7,7 @@
 #
 #         TRESSPASSERS WILL BE SHOT
 #
+#    Version 0.3 Implemented better homing
 #      Version 0.2 PyVISA 1.6 compatible
 #        Version 0.1 Proof-of-concept
 #
@@ -320,22 +321,15 @@ class SmartStage:
     def close(self):
         self.ARC200.close()
 
-    def move_to(self,axis,pos,clicks=10):
-        #print '----IN MOVE_TO----'
+    def move_past(self,axis,pos,clicks=10):
         self.check_input_pos(pos)
         self.curpos = self.ARC200.position(axis)
-        #print 'I am at:',self.curpos,'in axis',axis
-        #print 'I want to go to:',pos,'in axis',axis
         self.direction = math.copysign(1,pos-self.curpos)
-        #print 'This means moving',self.direction
         if self.direction == -1:
             self.move = self.ANC300.stepd
-            #print 'I need to step DOWN from my current position'
         elif  self.direction == 1:
             self.move = self.ANC300.stepu
-            #print 'I need to step UP from my current position'
         self.steps = 0
-        #print 'Time to move!'
         while True:
             self.steps += 1
             self.move(axis,clicks)
@@ -343,11 +337,38 @@ class SmartStage:
                 break
             if self.direction == 1 and self.ARC200.position(axis) >= pos:
                 break
-        #print 'I think I\'m there!'
-        #print 'I am at',self.ARC200.position(axis),'in axis',axis
-        #print 'My target was',pos
-        #print 'I began at',self.curpos
-        #print '----LEAVING MOVE_TO----'
         return self.steps
-            
 
+    def move_to_near(self,axis,pos,clicks=10):
+        self.tolerance = 0.001 #accurate to 1micron
+        self.check_input_pos(pos)
+        self.curpos = self.ARC200.position(axis)
+        self.direction = math.copysign(1,pos-self.curpos)
+        if self.direction == -1:
+            self.move = self.ANC300.stepd
+        elif  self.direction == 1:
+            self.move = self.ANC300.stepu
+        while True:
+            self.move(axis,clicks)
+            time.sleep(0.01)
+            self.curpos = self.ARC200.position(axis)
+            if abs(self.curpos-pos) <= self.tolerance:
+                #print 'STOP! Arrived!'
+                return True
+            elif (self.direction == -1 and self.curpos < pos) or (
+                  self.direction == 1 and self.curpos > pos):
+                #print 'on this pass, we overshot'
+                return False
+
+
+    def move_to(self,axis,pos,start_steps=100):
+        self.check_input_pos(pos)
+        if start_steps == 10**math.floor(math.log10(start_steps)):
+            self.step_size = list(np.logspace(math.floor(math.log10(start_steps)),0,math.floor(math.log10(start_steps))+1))
+        else:
+            self.step_size = [float(start_steps)]+list(np.logspace(math.floor(math.log10(start_steps)),0,math.floor(math.log10(start_steps))+1))
+        for steps in self.step_size:
+            self.result = self.move_to_near(axis,pos,int(steps))
+            if self.result == True:
+                return True
+        return False

@@ -113,7 +113,7 @@ def setSettings(settings):
 
 def convert_to_builtin_type(obj):
 	#from https://pymotw.com/2/json/
-	print 'default(', repr(obj), ')'
+	#print 'default(', repr(obj), ')'
 	# Convert objects to a dictionary of their representation
 	d = { '__class__':obj.__class__.__name__, '__module__':obj.__module__}
 	d.update(obj.__dict__)
@@ -209,6 +209,10 @@ class MapperProg(QtGui.QMainWindow):
 		aboutAction.setStatusTip('About program')
 		aboutAction.triggered.connect(self.aboutProgram)
 
+		toolAction = QtGui.QAction(QtGui.QIcon(r'icons\tool.png'),'&Mapper Tool',self)
+		toolAction.setStatusTip('Launch Mapper Tool')
+		toolAction.triggered.connect(self.mapperTool)
+
 		menubar = self.menuBar()
 		fileMenu = menubar.addMenu('&File')
 		fileMenu.addAction(newAction)
@@ -237,6 +241,8 @@ class MapperProg(QtGui.QMainWindow):
 		self.toolbar.addSeparator()
 		self.toolbar.addAction(plotAction)
 		self.toolbar.addAction(exportAction)
+		self.toolbar.addSeparator()
+		self.toolbar.addAction(toolAction)
 
 	def createLayoutsAndWidgets(self):
 		self.metadata_grid = QtGui.QGridLayout()
@@ -579,41 +585,20 @@ class MapperProg(QtGui.QMainWindow):
 		except ValueError as e:
 			self.statusBar().showMessage('ERROR: '+str(e))
 			return
-		#then check input values (ranges, etc)
-		#tests is a series of tests to be checked against
 
-		self.tests = {'m':	[[['xt','xf','yf','yt'],[0,5],'X/Y range(s) out of bounds'],
-							[['v'],[0.01,70],'Voltage out of bounds'],
-							[['f'],[1,1000],'Frequency out of bounds'],
-							[['vr'],[0,2],'Readout voltage out of bounds'],
-							[['c'],[1,1000],'Clicks out of bounds']],
-					  'M':	[[['xt','xf','yf','yt'],[0,5],'X/Y range(s) out of bounds'],
-							[['vr'],[0,2],'Readout voltage out of bounds'],
-							[['n'],[2,1000],'Number of points out of bounds']],
-					  's':	[[['xt','xf','yf','yt'],[0,10],'X/Y range(s) out of bounds'],
-					  		[['xv','yv'],[0,1],'X/Y step size out of bounds']],
-					  'r':  [[['tp','tm'],[0,2],'Time(s) out of bounds']],
-					  'c':  [[['tp','tm'],[0,2],'Time(s) out of bounds']]}
-		for test_set in self.tests.keys():
-			if test_set in self.meas_par['mtype']:
-				for test in self.tests[test_set]:
-					for key in test[0]:
-						if not (test[1][0] <= self.meas_par[key] <= test[1][1]):
-							self.statusBar().showMessage(test[2]+': '+str(self.meas_par[key])+' outside limits '+str(test[1][0])+', '+str(test[1][1]))
-							return
-		#connect to instrumentation and pass handles through
+		#pass handles through for instrumentation
 		if 'm' in self.meas_par['mtype'] or 'M' in self.meas_par['mtype']:
-			self.meas_par['mover'] = movement.findClass(self.settings['DEVICES']['motortype'])()
+			self.meas_par['mover'] = movement.findClass(self.settings['DEVICES']['motortype'])
 
 		elif 's' in self.meas_par['mtype']:
-			self.meas_par['mover'] = movement.findClass(self.settings['DEVICES']['scannertype'])()
+			self.meas_par['mover'] = movement.findClass(self.settings['DEVICES']['scannertype'])
 
 		
 		if 'r' in self.meas_par['mtype']:
-			self.meas_par['measurer'] = measurement.findClass(self.settings['DEVICES']['reflectype'])()
+			self.meas_par['measurer'] = measurement.findClass(self.settings['DEVICES']['reflectype'])
 
 		elif 'c' in self.meas_par['mtype']:
-			self.meas_par['measurer'] = measurement.findClass(self.settings['DEVICES']['countertype'])()
+			self.meas_par['measurer'] = measurement.findClass(self.settings['DEVICES']['countertype'])
 
 		if not any(x in self.meas_par['mover'].devicetype for x in self.meas_par['mtype']):
 			self.statusBar().showMessage('Movement device different type from expected! Check settings. Aborting...')
@@ -621,7 +606,24 @@ class MapperProg(QtGui.QMainWindow):
 		if not any(x in self.meas_par['measurer'].devicetype for x in self.meas_par['mtype']):
 			self.statusBar().showMessage('Measurement device different type from expected! Check settings. Aborting...')
 			return
+		#then check input values (ranges, etc)
+		#tests is a series of tests to be checked against
+		self.tests = {}
+		for item in ['mover','measurer']:
+			for key in self.meas_par[item].tests.keys():
+				self.tests[key] = self.meas_par[item].tests[key]
 
+		for test_set in self.tests.keys():
+			if test_set in self.meas_par['mtype']:
+				for test in self.tests[test_set]:
+					for key in test[0]:
+						if not (test[1][0] <= self.meas_par[key] <= test[1][1]):
+							self.statusBar().showMessage(test[2]+': '+str(self.meas_par[key])+' outside limits '+str(test[1][0])+', '+str(test[1][1]))
+							return
+
+		#instantiate instrumentation (that has now passed the tests)
+		self.meas_par['mover'] = self.meas_par['mover']()
+		self.meas_par['measurer'] = self.meas_par['measurer']()
 
 		#perform final metadata stuff
 		if not self.manualtemp.isChecked() or not self.manualbias.isChecked():
@@ -959,6 +961,9 @@ class MapperProg(QtGui.QMainWindow):
 		self.aboutBox.setWindowTitle('About program')
 		self.aboutBox.exec_()
 
+	def mapperTool(self):
+		self.toolWindow = MapperTool()
+
 	def closeEvent(self,event):
 		setSettings(self.settings)
 		if self.checkNeedsSaving(event) == False:
@@ -1034,12 +1039,12 @@ class MapperTool(QtGui.QMainWindow):
 		self.tool_grid.addWidget(self.move,1,0,1,4)
 
 		#populate scanner grid
-		self.xfrom_s = QtGui.QLineEdit('')
-		self.xto_s = QtGui.QLineEdit('')
-		self.yfrom_s = QtGui.QLineEdit('')
-		self.yto_s = QtGui.QLineEdit('')
-		self.xvoltstep_s = QtGui.QLineEdit('')
-		self.yvoltstep_s = QtGui.QLineEdit('')
+		self.xfrom_s = QtGui.QLineEdit('0')
+		self.xto_s = QtGui.QLineEdit('10')
+		self.yfrom_s = QtGui.QLineEdit('0')
+		self.yto_s = QtGui.QLineEdit('10')
+		self.xvoltstep_s = QtGui.QLineEdit('1')
+		self.yvoltstep_s = QtGui.QLineEdit('1')
 		self.scan = QtGui.QPushButton('Run')
 
 		self.scan_grid.addWidget(QtGui.QLabel('X range:'),1,0)
@@ -1914,16 +1919,16 @@ class MapperPlot(QtGui.QMainWindow):
 				except RuntimeError:
 					pass
 
-				print 'began adding datapoints'
+				#print 'began adding datapoints'
 				self.start_time = time.time()
 				if self.show_datapoints.isChecked():
 					self.colordata = []
 					for value in [((x-min(self.data_array[4]))/(max(self.data_array[4]-min(self.data_array[4])))) for x in self.data_array[4]]:
 						self.colordata.append(colormaps.viridis(value))
-					print 'finished doing colordata at:',time.time()-self.start_time
+					#print 'finished doing colordata at:',time.time()-self.start_time
 					for v, value in enumerate(self.data_array[0]):
 						self.plot = plt.plot([self.data_array[0][v]], [self.data_array[1][v]],'o',color=self.colordata[v],ms=10)
-					print 'finished plotting at:',time.time()-self.start_time
+					#print 'finished plotting at:',time.time()-self.start_time
 			if self.checkSde() == True:
 				self.cbar.set_label('SDE (%)')
 			elif 'c' in self.meas_par['mtype'] and self.checkSde() != True:
