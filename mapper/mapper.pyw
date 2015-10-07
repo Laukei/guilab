@@ -1123,10 +1123,6 @@ class MapperTool(QtGui.QMainWindow):
 							self.acquisitionFinished()
 							return
 
-		#instantiate instrumentation (that has now passed the tests)
-		self.sMeas_par['mover'] = self.sMeas_par['mover']()
-		self.sMeas_par['measurer'] = self.sMeas_par['measurer']()
-
 		#perform final metadata stuff
 		#self.haltAction.setEnabled(True)
 		#self.acquireAction.setEnabled(False)
@@ -1264,9 +1260,6 @@ class MapperTool(QtGui.QMainWindow):
 								self.statusBar().showMessage(test[2]+': '+str(self.mMeas_par[key])+' outside limits '+str(test[1][0])+', '+str(test[1][1]))
 								self.moveFinished()
 								return
-
-		#instantiate instrumentation (that has now passed the tests)
-		self.mMeas_par['mover'] = self.mMeas_par['mover']()
 
 		#perform final metadata stuff
 		#self.haltAction.setEnabled(True)
@@ -1482,12 +1475,16 @@ class ScanDrone(QtCore.QObject):
 				return	
 
 	def init(self):
+		'''
 		try:
 			self.sMeas_par['mover'] = self.sMeas_par['mover']()
 			self.sMeas_par['measurer'] = self.sMeas_par['measurer']()
 		except:
 			print 'Problem instantiating mover/measurer!'
-			self.finished.emit()
+			self.scanfinished.emit()
+		'''
+		self.sMeas_par['mover'] = self.sMeas_par['mover']()
+		self.sMeas_par['measurer'] = self.sMeas_par['measurer']()
 		self.mover = self.sMeas_par['mover']
 		self.measurer = self.sMeas_par['measurer']
 
@@ -1530,7 +1527,7 @@ class MoveDrone(QtCore.QObject):
 			self.meas_par['mover'] = self.meas_par['mover']()
 		except:
 			print 'Problem instantiating mover!'
-			self.finished.emit()
+			self.movefinished.emit()
 		self.mover = self.mMeas_par['mover']
 
 		#perform setup of devices
