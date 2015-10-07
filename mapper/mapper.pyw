@@ -135,6 +135,7 @@ class MapperProg(QtGui.QMainWindow):
 		#finalize things
 		self.filename = ''
 		self.data = []
+		self.mapper_tool_running = False
 		self.settings = getSettings()
 		self.setDefaults()
 		self.name_of_application = 'Mapper'
@@ -749,13 +750,19 @@ class MapperProg(QtGui.QMainWindow):
 			self.fig.tight_layout()
 
 	def startAcquisition(self):
-		self.acquireAction.setEnabled(False)
-		self.haltAction.setEnabled(False)
-		self.acquire()
+		if not self.mapper_tool_running:
+			self.acquireAction.setEnabled(False)
+			self.haltAction.setEnabled(False)
+			self.acquire()
+		else:
+			self.statusBar().showMessage('Mapper Tool has priority')
 
 	def acquisitionFinished(self):
-		self.haltAction.setEnabled(False)
-		self.acquireAction.setEnabled(True)
+		if not self.mapper_tool_running:
+			self.haltAction.setEnabled(False)
+			self.acquireAction.setEnabled(True)
+		else:
+			self.statusBar().showMessage('Mapper Tool has priority')
 
 	def acquisitionRunning(self):
 		self.acquireAction.setEnabled(False)
@@ -967,7 +974,23 @@ class MapperProg(QtGui.QMainWindow):
 		self.aboutBox.exec_()
 
 	def mapperTool(self):
+		if self.acquireAction.isEnabled() == False:
+			reply = QtGui.QMessageBox.question(self,'Mapper',
+				'Cancel current measurement and run Mapper Tool?',QtGui.QMessageBox.Ok | QtGui.QMessageBox.Cancel, QtGui.QMessageBox.Cancel)
+			if reply == QtGui.QMessageBox.Cancel:
+				return
 		self.toolWindow = MapperTool(self.settings)
+		self.mapper_tool_running = True
+		try:
+			self.halt()
+		except AttributeError:
+			pass
+		self.acquireAction.setEnabled(False)
+		self.toolWindow.aboutToQuit.connect(self.acquireAction.setEnabled)
+		self.toolWindow.aboutToQuit.connect(self.mapperToolClosed)
+
+	def mapperToolClosed(self):
+		self.mapper_tool_running = False
 
 	def closeEvent(self,event):
 		setSettings(self.settings)
@@ -989,7 +1012,7 @@ class MapperTool(QtGui.QMainWindow):
 		super(MapperTool,self).__init__()
 		self.settings = settings
 		self.initUI()
-	aboutToQuit = QtCore.Signal()
+	aboutToQuit = QtCore.Signal(bool)
 
 
 	def initUI(self):
@@ -1287,6 +1310,7 @@ class MapperTool(QtGui.QMainWindow):
 		except AttributeError:
 			pass
 		self.fig.clear()
+		self.aboutToQuit.emit(True)
 		event.accept()
 
 class MapperDrone(QtCore.QObject):
@@ -1475,16 +1499,13 @@ class ScanDrone(QtCore.QObject):
 				return	
 
 	def init(self):
-		'''
 		try:
 			self.sMeas_par['mover'] = self.sMeas_par['mover']()
 			self.sMeas_par['measurer'] = self.sMeas_par['measurer']()
 		except:
 			print 'Problem instantiating mover/measurer!'
 			self.scanfinished.emit()
-		'''
-		self.sMeas_par['mover'] = self.sMeas_par['mover']()
-		self.sMeas_par['measurer'] = self.sMeas_par['measurer']()
+
 		self.mover = self.sMeas_par['mover']
 		self.measurer = self.sMeas_par['measurer']
 
@@ -1524,7 +1545,7 @@ class MoveDrone(QtCore.QObject):
 
 	def init(self):
 		try:
-			self.meas_par['mover'] = self.meas_par['mover']()
+			self.mMeas_par['mover'] = self.mMeas_par['mover']()
 		except:
 			print 'Problem instantiating mover!'
 			self.movefinished.emit()
