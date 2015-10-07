@@ -621,10 +621,6 @@ class MapperProg(QtGui.QMainWindow):
 							self.statusBar().showMessage(test[2]+': '+str(self.meas_par[key])+' outside limits '+str(test[1][0])+', '+str(test[1][1]))
 							return
 
-		#instantiate instrumentation (that has now passed the tests)
-		self.meas_par['mover'] = self.meas_par['mover']()
-		self.meas_par['measurer'] = self.meas_par['measurer']()
-
 		#perform final metadata stuff
 		if not self.manualtemp.isChecked() or not self.manualbias.isChecked():
 			self.sim900 = Sim900(self.settings['DEVICES']['sim900addr'])
@@ -681,6 +677,7 @@ class MapperProg(QtGui.QMainWindow):
 		self.y_steps = None
 		self.setNeedsSaving()
 		self.obj_thread.start()
+
 		#print 'launched'
 
 	def getData(self, data):
@@ -751,9 +748,18 @@ class MapperProg(QtGui.QMainWindow):
 			self.canvas = FigureCanvas(self.fig)
 			self.fig.tight_layout()
 
+	def startAcquisition(self):
+		self.acquireAction.setEnabled(False)
+		self.haltAction.setEnabled(False)
+		self.acquire()
+
 	def acquisitionFinished(self):
 		self.haltAction.setEnabled(False)
 		self.acquireAction.setEnabled(True)
+
+	def acquisitionRunning(self):
+		self.acquireAction.setEnabled(False)
+		self.haltAction.setEnabled(True)
 
 	def new(self,save_already_checked = False):
 		if save_already_checked == True or self.checkNeedsSaving() == False:
@@ -843,9 +849,8 @@ class MapperProg(QtGui.QMainWindow):
 			self.setWindowTitle(self.name_of_application+' - '+os.path.basename(self.filename) + '[*]')
 
 	def halt(self):
-		self.haltAction.setEnabled(False)
-		self.acquireAction.setEnabled(True)
 		self.mapper_drone.abort = True
+		self.haltAction.setEnabled(False)
 
 	def plotExternal(self):
 		self.plotWindow = MapperPlot(self.data,self.processMetadata(),self.settings,self.filename)
@@ -1297,8 +1302,6 @@ class MapperDrone(QtCore.QObject):
 		#handle stuff passed in
 		self.abort = False
 		self.meas_par = meas_par
-		self.mover = meas_par['mover']
-		self.measurer = meas_par['measurer']
 		
 	finished = QtCore.Signal()
 	newdata = QtCore.Signal(list)
@@ -1314,9 +1317,7 @@ class MapperDrone(QtCore.QObject):
 		self.xgoesup = self.meas_par['xt'] > self.meas_par['xf']
 		self.ygoesup = self.meas_par['yt'] > self.meas_par['yf']
 		self.dataset = []
-		if 'u' in self.meas_par['mtype']:
-			self.runRepeatingMap()
-		elif 'M' in self.meas_par['mtype'] or 's' in self.meas_par['mtype']:
+		if 'M' in self.meas_par['mtype'] or 's' in self.meas_par['mtype']:
 			self.runClosedLoopMap()
 		elif 'm' in self.meas_par['mtype']:
 			self.runOpenLoopMap()
@@ -1384,10 +1385,18 @@ class MapperDrone(QtCore.QObject):
 				self.aborted.emit()
 				return
 
-	def runRepeatingMap(self):
-		pass
 
 	def init(self):
+		#instantiate instrumentation (that has now passed the tests)
+		try:
+			self.meas_par['mover'] = self.meas_par['mover']()
+			self.meas_par['measurer'] = self.meas_par['measurer']()
+		except:
+			print 'Problem instantiating mover/measurer!'
+			self.finished.emit()
+		self.mover = self.meas_par['mover']
+		self.measurer = self.meas_par['measurer']
+
 		#perform setup of devices
 		if 'm' in self.meas_par['mtype']:
 			self.mover.setDefaults( self.meas_par['v'],
@@ -1421,13 +1430,11 @@ class MapperDrone(QtCore.QObject):
 										self.meas_par['tp'])
 	
 class ScanDrone(QtCore.QObject):
-	def __init__(self,meas_par):
+	def __init__(self,sMeas_par):
 		super(ScanDrone,self).__init__()
 		#handle stuff passed in
 		self.abort = False
-		self.meas_par = meas_par
-		self.mover = meas_par['mover']
-		self.measurer = meas_par['measurer']
+		self.sMeas_par = sMeas_par
 		
 	scanfinished = QtCore.Signal()
 	scannewdata = QtCore.Signal(list)
@@ -1437,18 +1444,18 @@ class ScanDrone(QtCore.QObject):
 
 	def runScan(self):
 		self.init() #readies mover/measurer
-		self.mover.moveTo('x',self.meas_par['xf'])
-		self.mover.moveTo('y',self.meas_par['yf'])
+		self.mover.moveTo('x',self.sMeas_par['xf'])
+		self.mover.moveTo('y',self.sMeas_par['yf'])
 		#print 'homed to:',self.mover.getPos()
-		self.xgoesup = self.meas_par['xt'] > self.meas_par['xf']
-		self.ygoesup = self.meas_par['yt'] > self.meas_par['yf']
+		self.xgoesup = self.sMeas_par['xt'] > self.sMeas_par['xf']
+		self.ygoesup = self.sMeas_par['yt'] > self.sMeas_par['yf']
 		self.dataset = []
 
-		if 'u' in self.meas_par['mtype']:
+		if 'u' in self.sMeas_par['mtype']:
 			self.runRepeatingMap()
 
-		self.mover.moveTo('x',self.meas_par['xf'])
-		self.mover.moveTo('y',self.meas_par['yf'])
+		self.mover.moveTo('x',self.sMeas_par['xf'])
+		self.mover.moveTo('y',self.sMeas_par['yf'])
 		self.mover.close()
 		self.measurer.close()
 		self.scanfinished.emit()
@@ -1475,18 +1482,27 @@ class ScanDrone(QtCore.QObject):
 				return	
 
 	def init(self):
+		try:
+			self.sMeas_par['mover'] = self.sMeas_par['mover']()
+			self.sMeas_par['measurer'] = self.sMeas_par['measurer']()
+		except:
+			print 'Problem instantiating mover/measurer!'
+			self.finished.emit()
+		self.mover = self.sMeas_par['mover']
+		self.measurer = self.sMeas_par['measurer']
+
 		#perform setup of devices
-		if 'u' in self.meas_par['mtype']:
-			self.mover.setDefaults(	self.meas_par['xv'],
-									self.meas_par['yv'])
-			self.x_steps = (abs(self.meas_par['xt']-self.meas_par['xf'])/self.meas_par['xv'])+1
-			self.y_steps = (abs(self.meas_par['yt']-self.meas_par['yf'])/self.meas_par['yv'])+1
-			self.x_steplist = np.linspace(self.meas_par['xf'],self.meas_par['xt'],self.x_steps)
-			self.y_steplist = np.linspace(self.meas_par['yf'],self.meas_par['yt'],self.y_steps)
+		if 'u' in self.sMeas_par['mtype']:
+			self.mover.setDefaults(	self.sMeas_par['xv'],
+									self.sMeas_par['yv'])
+			self.x_steps = (abs(self.sMeas_par['xt']-self.sMeas_par['xf'])/self.sMeas_par['xv'])+1
+			self.y_steps = (abs(self.sMeas_par['yt']-self.sMeas_par['yf'])/self.sMeas_par['yv'])+1
+			self.x_steplist = np.linspace(self.sMeas_par['xf'],self.sMeas_par['xt'],self.x_steps)
+			self.y_steplist = np.linspace(self.sMeas_par['yf'],self.sMeas_par['yt'],self.y_steps)
 			self.scanxSteps.emit(int(self.x_steps))
 			self.scanySteps.emit(int(self.y_steps))
-			self.measurer.setDefaults(	self.meas_par['tm'],
-										self.meas_par['tp'])
+			self.measurer.setDefaults(	self.sMeas_par['tm'],
+										self.sMeas_par['tp'])
 
 class MoveDrone(QtCore.QObject):
 	def __init__(self,mMeas_par):
@@ -1494,7 +1510,6 @@ class MoveDrone(QtCore.QObject):
 		#handle stuff passed in
 		self.abort = False
 		self.mMeas_par = mMeas_par
-		self.mover = mMeas_par['mover']
 		
 	movefinished = QtCore.Signal()
 	moveaborted = QtCore.Signal()
@@ -1511,6 +1526,13 @@ class MoveDrone(QtCore.QObject):
 		self.movefinished.emit()
 
 	def init(self):
+		try:
+			self.meas_par['mover'] = self.meas_par['mover']()
+		except:
+			print 'Problem instantiating mover!'
+			self.finished.emit()
+		self.mover = self.mMeas_par['mover']
+
 		#perform setup of devices
 		if 'v' in self.mMeas_par['mtype']:
 			self.mover.setDefaults( self.mMeas_par['v'],
