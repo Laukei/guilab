@@ -962,7 +962,7 @@ class MapperProg(QtGui.QMainWindow):
 		self.aboutBox.exec_()
 
 	def mapperTool(self):
-		self.toolWindow = MapperTool()
+		self.toolWindow = MapperTool(self.settings)
 
 	def closeEvent(self,event):
 		setSettings(self.settings)
@@ -980,8 +980,9 @@ class MapperProg(QtGui.QMainWindow):
 		event.accept()
 
 class MapperTool(QtGui.QMainWindow):
-	def __init__(self):
+	def __init__(self, settings):
 		super(MapperTool,self).__init__()
+		self.settings = settings
 		self.initUI()
 	aboutToQuit = QtCore.Signal()
 
@@ -994,7 +995,7 @@ class MapperTool(QtGui.QMainWindow):
 		#finalize things
 		self.data = []
 		self.setWindowTitle('Mapper Tools')
-		self.setWindowIcon(QtGui.QIcon(r'icons\mapper.png'))
+		self.setWindowIcon(QtGui.QIcon(r'icons\tool.png'))
 		self.statusBar().showMessage('Ready...')
 		self.show()
 
@@ -1063,15 +1064,232 @@ class MapperTool(QtGui.QMainWindow):
 
 		self.scan_grid.addWidget(self.scan,4,0,1,4)
 
+		self.scan.clicked.connect(self.runButtonToggle)
+		self.move.clicked.connect(self.moveTo)
+
 	def checkForGraph(self):
 		try:
 			self.canvas
+			print 'is this ever triggered?'
 		except AttributeError:
 			self.data = np.array([[]])
-			self.fig = plt.figure('preview',figsize = (4.5,4), dpi=72, facecolor=(1,1,1), edgecolor=(0,0,0))
+			self.fig = plt.figure('scanview',figsize = (5,4), dpi=72, facecolor=(1,1,1), edgecolor=(0,0,0))
 			self.ax = self.fig.add_subplot(1,1,1)
 			self.canvas = FigureCanvas(self.fig)
 			self.fig.tight_layout()
+
+	def runScan(self):
+		#first: work out what measurement we're trying to run
+		#by finding which tabs are selected
+		self.sMeas_par = {}
+		self.data = []
+		self.colorbar_max = -float('inf')
+		try:
+			self.sMeas_par['mtype'] = 'usr'
+			self.sMeas_par['xf'] = float(self.xfrom_s.text())
+			self.sMeas_par['xt'] = float(self.xto_s.text())
+			self.sMeas_par['yf'] = float(self.yfrom_s.text())
+			self.sMeas_par['yt'] = float(self.yto_s.text())
+			self.sMeas_par['xv'] = float(self.xvoltstep_s.text())
+			self.sMeas_par['yv'] = float(self.yvoltstep_s.text())
+			self.sMeas_par['tm'] = float(0)
+			self.sMeas_par['tp'] = float(0)
+			self.sMeas_par['mover'] = movement.findClass(self.settings['DEVICES']['scannertype'])
+			self.sMeas_par['measurer'] = measurement.findClass(self.settings['DEVICES']['reflectype'])
+
+		except ValueError as e:
+			self.statusBar().showMessage('ERROR: '+str(e))
+			self.acquisitionFinished()
+			return
+
+		#then check input values (ranges, etc)
+		#tests is a series of tests to be checked against
+		self.tests = {}
+		for item in ['mover','measurer']:
+			for key in self.sMeas_par[item].tests.keys():
+				self.tests[key] = self.sMeas_par[item].tests[key]
+
+		for test_set in self.tests.keys():
+			if test_set in self.sMeas_par['mtype']:
+				for test in self.tests[test_set]:
+					for key in test[0]:
+						if not (test[1][0] <= self.sMeas_par[key] <= test[1][1]):
+							self.statusBar().showMessage(test[2]+': '+str(self.sMeas_par[key])+' outside limits '+str(test[1][0])+', '+str(test[1][1]))
+							self.acquisitionFinished()
+							return
+
+		#instantiate instrumentation (that has now passed the tests)
+		self.sMeas_par['mover'] = self.sMeas_par['mover']()
+		self.sMeas_par['measurer'] = self.sMeas_par['measurer']()
+
+		#perform final metadata stuff
+		#self.haltAction.setEnabled(True)
+		#self.acquireAction.setEnabled(False)
+
+		#then launch the process and pass the values
+		#print 'launching in separate thread...',
+		self.x_forward = True
+		self.y_forward = True
+		if self.sMeas_par['xf']>self.sMeas_par['xt']:
+			self.x_forward = False
+		if self.sMeas_par['yf']>self.sMeas_par['yt']:
+			self.y_forward = False
+		self.scanobj_thread = QtCore.QThread()
+		self.scan_drone = ScanDrone(self.sMeas_par)
+		self.scan_drone.moveToThread(self.scanobj_thread)
+		self.scanobj_thread.started.connect(self.scan_drone.runScan)
+		self.scan_drone.scannewdata.connect(self.getData)
+		self.scan_drone.scanfinished.connect(self.scanobj_thread.quit)
+		self.scan_drone.scanfinished.connect(self.acquisitionFinished)
+		self.scan_drone.scanxSteps.connect(self.getXSteps)
+		self.scan_drone.scanySteps.connect(self.getYSteps)
+		self.x_steps = None
+		self.y_steps = None
+		self.scanobj_thread.start()
+		self.scan.setText('Stop')
+		self.scan.setEnabled(True)
+		#print 'launched'
+
+	def getData(self, data):
+		try:
+			self.data[data[0]] = data[1:]
+		except IndexError:
+			self.data.append(data[1:])
+		self.updatePreviewGrid()
+
+	def getXSteps(self,x_steps):
+		self.x_steps = x_steps
+
+	def getYSteps(self,y_steps):
+		self.y_steps = y_steps
+
+	def updatePreviewGrid(self):
+		try:
+			plt.figure('scanview')
+			self.data_array = np.array(self.data).transpose()
+			self.ax.set_xlabel('X position (V)')
+			self.ax.set_ylabel('Y position (V)')
+
+			self.extent = [self.data_array[0].min(), self.data_array[0].max(), self.data_array[1].min(),self.data_array[1].max()]
+			self.z_data = [list(self.data_array[4][x:x+self.x_steps]) for x in range(0,len(self.data_array[4]),self.x_steps)]
+			if len(self.z_data[-1]) < self.x_steps:
+				self.z_data[-1] += [np.nan]*(self.x_steps - len(self.z_data[-1]))
+			self.extent[1] = max([self.data_array[0].max(),self.sMeas_par['xt'],self.sMeas_par['xf']])
+			self.extent[0] = min([self.data_array[0].min(),self.sMeas_par['xt'],self.sMeas_par['xf']])
+			if self.y_steps != None and len(self.z_data) < self.y_steps:
+				self.z_data += [[np.nan]*self.x_steps]*(self.y_steps-len(self.z_data))
+				self.extent[3] = max([self.data_array[1].max(),self.sMeas_par['yt'],self.sMeas_par['yf']])
+				self.extent[2] = min([self.data_array[1].min(),self.sMeas_par['yt'],self.sMeas_par['yf']])
+
+
+			#correct for swapped .extents()
+			if not self.x_forward:
+				for r, row in enumerate(self.z_data):
+					self.z_data[r] = row[::-1]
+			if self.y_forward:
+				self.z_data = self.z_data[::-1]
+			try:
+				self.img.set_data(self.z_data)
+				self.img.autoscale()
+				self.img.set_extent(self.extent)
+			except AttributeError:
+				self.img = plt.imshow(self.z_data,extent=self.extent, interpolation='nearest',cmap=colormaps.viridis, aspect='auto')
+				self.cbar = plt.colorbar()
+			self.fig.tight_layout()
+			self.canvas.draw()
+		except ValueError:
+			pass
+
+	def acquisitionFinished(self):
+		self.scan.setText('Run')
+		self.scan.setEnabled(True)
+
+	def runButtonToggle(self):
+		if self.scan.text() == 'Run':
+			self.scan.setDisabled(True)
+			self.runScan()
+		elif self.scan.text() == 'Stop':
+			self.scan_drone.abort = True
+			self.scan.setDisabled(True)
+
+	def moveTo(self):
+		self.move.setEnabled(False)
+		#first: work out what measurement we're trying to run
+		#by finding which tabs are selected
+		self.mMeas_par = {}
+		try:
+			self.mMeas_par['mtype'] = 'vm'
+			self.mMeas_par['v'] = float(60)
+			self.mMeas_par['f'] = float(200)
+			self.mMeas_par['c'] = float(100)
+			self.mMeas_par['vr'] = float(1)
+			self.mMeas_par['xf'] = 0
+			self.mMeas_par['yf'] = 0
+			try:
+				self.mMeas_par['xt'] = float(self.x_m.text())
+			except ValueError:
+				self.mMeas_par['xt'] = None
+			try:
+				self.mMeas_par['yt'] = float(self.y_m.text())
+			except ValueError:
+				self.mMeas_par['yt'] = None
+			self.mMeas_par['mover'] = movement.findClass(self.settings['DEVICES']['motortype'])
+
+		except ValueError as e:
+			self.statusBar().showMessage('ERROR: '+str(e))
+			self.moveFinished()
+			return
+		if self.mMeas_par['xt'] == self.mMeas_par['yt'] == None:
+			self.statusBar().showMessage('No target locations specified, aborting')
+			self.moveFinished()
+			return
+		#then check input values (ranges, etc)
+		#tests is a series of tests to be checked against
+		self.tests = {}
+		for item in ['mover']:
+			for key in self.mMeas_par[item].tests.keys():
+				self.tests[key] = self.mMeas_par[item].tests[key]
+
+		for test_set in self.tests.keys():
+			if test_set in self.mMeas_par['mtype']:
+				for test in self.tests[test_set]:
+					for key in test[0]:
+						if not (test[1][0] <= self.mMeas_par[key] <= test[1][1]):
+							if not (self.mMeas_par[key] == None and (key == 'xt' or key == 'yt')):
+								self.statusBar().showMessage(test[2]+': '+str(self.mMeas_par[key])+' outside limits '+str(test[1][0])+', '+str(test[1][1]))
+								self.moveFinished()
+								return
+
+		#instantiate instrumentation (that has now passed the tests)
+		self.mMeas_par['mover'] = self.mMeas_par['mover']()
+
+		#perform final metadata stuff
+		#self.haltAction.setEnabled(True)
+		#self.acquireAction.setEnabled(False)
+
+		#then launch the process and pass the values
+		#print 'launching in separate thread...',
+		self.moveobj_thread = QtCore.QThread()
+		self.move_drone = MoveDrone(self.mMeas_par)
+		self.move_drone.moveToThread(self.moveobj_thread)
+		self.moveobj_thread.started.connect(self.move_drone.runMove)
+		self.move_drone.movefinished.connect(self.moveobj_thread.quit)
+		self.move_drone.movefinished.connect(self.moveFinished)
+		self.moveobj_thread.start()
+		self.move.setText('Moving...')
+		#print 'launched'
+
+	def moveFinished(self):
+		self.move.setText('Go')
+		self.move.setEnabled(True)
+
+	def closeEvent(self,event):
+		try:
+			self.scan_drone.abort = True
+		except AttributeError:
+			pass
+		self.fig.clear()
+		event.accept()
 
 class MapperDrone(QtCore.QObject):
 	def __init__(self,meas_par):
@@ -1096,7 +1314,9 @@ class MapperDrone(QtCore.QObject):
 		self.xgoesup = self.meas_par['xt'] > self.meas_par['xf']
 		self.ygoesup = self.meas_par['yt'] > self.meas_par['yf']
 		self.dataset = []
-		if 'M' in self.meas_par['mtype'] or 's' in self.meas_par['mtype']:
+		if 'u' in self.meas_par['mtype']:
+			self.runRepeatingMap()
+		elif 'M' in self.meas_par['mtype'] or 's' in self.meas_par['mtype']:
 			self.runClosedLoopMap()
 		elif 'm' in self.meas_par['mtype']:
 			self.runOpenLoopMap()
@@ -1164,6 +1384,9 @@ class MapperDrone(QtCore.QObject):
 				self.aborted.emit()
 				return
 
+	def runRepeatingMap(self):
+		pass
+
 	def init(self):
 		#perform setup of devices
 		if 'm' in self.meas_par['mtype']:
@@ -1196,7 +1419,106 @@ class MapperDrone(QtCore.QObject):
 		elif 'c' in self.meas_par['mtype']:
 			self.measurer.setDefaults(	self.meas_par['tm'],
 										self.meas_par['tp'])
+	
+class ScanDrone(QtCore.QObject):
+	def __init__(self,meas_par):
+		super(ScanDrone,self).__init__()
+		#handle stuff passed in
+		self.abort = False
+		self.meas_par = meas_par
+		self.mover = meas_par['mover']
+		self.measurer = meas_par['measurer']
 		
+	scanfinished = QtCore.Signal()
+	scannewdata = QtCore.Signal(list)
+	scanaborted = QtCore.Signal()
+	scanxSteps = QtCore.Signal(int)
+	scanySteps = QtCore.Signal(int)
+
+	def runScan(self):
+		self.init() #readies mover/measurer
+		self.mover.moveTo('x',self.meas_par['xf'])
+		self.mover.moveTo('y',self.meas_par['yf'])
+		#print 'homed to:',self.mover.getPos()
+		self.xgoesup = self.meas_par['xt'] > self.meas_par['xf']
+		self.ygoesup = self.meas_par['yt'] > self.meas_par['yf']
+		self.dataset = []
+
+		if 'u' in self.meas_par['mtype']:
+			self.runRepeatingMap()
+
+		self.mover.moveTo('x',self.meas_par['xf'])
+		self.mover.moveTo('y',self.meas_par['yf'])
+		self.mover.close()
+		self.measurer.close()
+		self.scanfinished.emit()
+
+	def runRepeatingMap(self):
+		while True:
+			self.counter = 0
+			for j, y_step in enumerate(self.y_steplist):
+				self.mover.moveTo('y',y_step)
+				for i, x_step in enumerate(self.x_steplist):
+					self.mover.moveTo('x',x_step)
+					self.pos = self.mover.getPos()
+					self.meas = self.measurer.getMeasurement()
+					self.scannewdata.emit([self.counter,self.pos['x'],self.pos['y'],i,j,self.meas])
+					self.counter += 1
+					if self.abort == True:
+						self.scanaborted.emit()
+						return
+				if self.abort == True:
+					self.scanaborted.emit()
+					return	
+			if self.abort == True:
+				self.scanaborted.emit()
+				return	
+
+	def init(self):
+		#perform setup of devices
+		if 'u' in self.meas_par['mtype']:
+			self.mover.setDefaults(	self.meas_par['xv'],
+									self.meas_par['yv'])
+			self.x_steps = (abs(self.meas_par['xt']-self.meas_par['xf'])/self.meas_par['xv'])+1
+			self.y_steps = (abs(self.meas_par['yt']-self.meas_par['yf'])/self.meas_par['yv'])+1
+			self.x_steplist = np.linspace(self.meas_par['xf'],self.meas_par['xt'],self.x_steps)
+			self.y_steplist = np.linspace(self.meas_par['yf'],self.meas_par['yt'],self.y_steps)
+			self.scanxSteps.emit(int(self.x_steps))
+			self.scanySteps.emit(int(self.y_steps))
+			self.measurer.setDefaults(	self.meas_par['tm'],
+										self.meas_par['tp'])
+
+class MoveDrone(QtCore.QObject):
+	def __init__(self,mMeas_par):
+		super(MoveDrone,self).__init__()
+		#handle stuff passed in
+		self.abort = False
+		self.mMeas_par = mMeas_par
+		self.mover = mMeas_par['mover']
+		
+	movefinished = QtCore.Signal()
+	moveaborted = QtCore.Signal()
+
+	def runMove(self):
+		self.init() #readies mover/measurer
+		print self.mover.getPos()
+		if self.mMeas_par['xt']!=None:
+			self.mover.moveTo('x',self.mMeas_par['xt'])
+		if self.mMeas_par['yt']!=None:
+			self.mover.moveTo('y',self.mMeas_par['yt'])
+		print self.mover.getPos()
+		self.mover.close()
+		self.movefinished.emit()
+
+	def init(self):
+		#perform setup of devices
+		if 'v' in self.mMeas_par['mtype']:
+			self.mover.setDefaults( self.mMeas_par['v'],
+									self.mMeas_par['f'],
+									self.mMeas_par['c'],
+									self.mMeas_par['vr'])
+
+
 class SettingsDialog(QtGui.QDialog):
 	def __init__(self,settings,movers,measurers):
 		super(SettingsDialog,self).__init__()
