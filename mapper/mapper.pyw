@@ -19,7 +19,6 @@ import colormaps
 import movement
 import measurement
 
-# swappable for fake modules (modulename -> modulename.fake)
 from sim900 import Sim900
 from attenuator import Attenuator
 # end swappable
@@ -149,53 +148,53 @@ class MapperProg(QtGui.QMainWindow):
 	def createMenuAndToolbar(self):
 		exitAction = QtGui.QAction(QtGui.QIcon(r'icons\exit.png'),'&Exit',self)
 		exitAction.setShortcut('Ctrl+Q')
-		exitAction.setStatusTip('Exit application')
+		exitAction.setStatusTip('Exit application (Ctrl-Q)')
 		exitAction.triggered.connect(self.close)
 
 		newAction = QtGui.QAction(QtGui.QIcon(r'icons\new.png'),'&New...',self)
 		newAction.setShortcut('Ctrl+N')
-		newAction.setStatusTip('Blank dataset')
+		newAction.setStatusTip('New blank dataset (Ctrl-N)')
 		newAction.triggered.connect(self.new)
 
 		newSequentialAction = QtGui.QAction(QtGui.QIcon(r'icons\newsequential.png'),'&New (sequential)...',self)
 		newSequentialAction.setShortcut('Ctrl+Shift+N')
-		newSequentialAction.setStatusTip('Blank sequential dataset')
+		newSequentialAction.setStatusTip('New blank sequential dataset (Ctrl-Shift-N)')
 		newSequentialAction.triggered.connect(self.newSequential)
 
 		openAction = QtGui.QAction(QtGui.QIcon(r'icons\open.png'),'&Open...',self)
 		openAction.setShortcut('Ctrl+O')
-		openAction.setStatusTip('Open data for viewing')
+		openAction.setStatusTip('Open data for viewing (Ctrl-O)')
 		openAction.triggered.connect(self.open)
 
 		saveAction = QtGui.QAction(QtGui.QIcon(r'icons\save.png'),'&Save',self)
 		saveAction.setShortcut('Ctrl+S')
-		saveAction.setStatusTip('Save current data')
+		saveAction.setStatusTip('Save current data (Ctrl-S)')
 		saveAction.triggered.connect(self.save)
 
 		saveAsAction = QtGui.QAction(QtGui.QIcon(r'icons\saveas.png'),'&Save As...',self)
 		saveAsAction.setShortcut('Ctrl+Shift+S')
-		saveAsAction.setStatusTip('Save as')
+		saveAsAction.setStatusTip('Save as (Ctrl-Shift-S)')
 		saveAsAction.triggered.connect(self.saveAs)
 
 		self.acquireAction = QtGui.QAction(QtGui.QIcon(r'icons\acquire.png'),'&Run',self)
 		self.acquireAction.setShortcut('Ctrl+R')
-		self.acquireAction.setStatusTip('Run scan (Ctrl+R)')
+		self.acquireAction.setStatusTip('Run scan (Ctrl-R)')
 		self.acquireAction.triggered.connect(self.acquire)
 
 		self.haltAction = QtGui.QAction(QtGui.QIcon(r'icons\abort.png'),'&Halt acquisition',self)
 		self.haltAction.setShortcut('Ctrl+H')
-		self.haltAction.setStatusTip('Halt acquisition (Ctrl+H)')
+		self.haltAction.setStatusTip('Halt acquisition (Ctrl-H)')
 		self.haltAction.triggered.connect(self.halt)
 		self.haltAction.setEnabled(False)
 
 		plotAction = QtGui.QAction(QtGui.QIcon(r'icons\plot.png'),'&Plot',self)
 		plotAction.setShortcut('Ctrl+P')
-		plotAction.setStatusTip('Plot data graphically (Ctrl+P)')
+		plotAction.setStatusTip('Plot data graphically (Ctrl-P)')
 		plotAction.triggered.connect(self.plotExternal)
 
 		exportAction = QtGui.QAction(QtGui.QIcon(r'icons\export.png'),'&Export',self)
 		exportAction.setShortcut('Ctrl+C')
-		exportAction.setStatusTip('Export data to CSV (Ctrl+C)')
+		exportAction.setStatusTip('Export data to CSV (Ctrl-C)')
 		exportAction.triggered.connect(self.export)
 
 		settingsAction = QtGui.QAction(QtGui.QIcon(r'icons\settings.png'),'&Device settings',self)
@@ -203,7 +202,8 @@ class MapperProg(QtGui.QMainWindow):
 		settingsAction.triggered.connect(self.openSettings)
 
 		helpAction = QtGui.QAction(QtGui.QIcon(r'icons\help.png'),'&View help',self)
-		helpAction.setStatusTip('View help file')
+		helpAction.setShortcut('Ctrl+H')
+		helpAction.setStatusTip('View help file (Ctrl-H)')
 		helpAction.triggered.connect(self.helpFile)
 
 		aboutAction = QtGui.QAction(QtGui.QIcon(r'icons\about.png'),'&About program',self)
@@ -211,7 +211,8 @@ class MapperProg(QtGui.QMainWindow):
 		aboutAction.triggered.connect(self.aboutProgram)
 
 		toolAction = QtGui.QAction(QtGui.QIcon(r'icons\tool.png'),'&Mapper Tool',self)
-		toolAction.setStatusTip('Launch Mapper Tool')
+		toolAction.setShortcut('Ctrl+T')
+		toolAction.setStatusTip('Launch Mapper Tool (Ctrl-T)')
 		toolAction.triggered.connect(self.mapperTool)
 
 		menubar = self.menuBar()
@@ -628,11 +629,15 @@ class MapperProg(QtGui.QMainWindow):
 			self.sim900check = self.sim900.check()
 			if type(self.sim900check) != str:
 				self.sim900 = Sim900(self.settings['DEVICES']['sim900addr'])
-				if not self.manualtemp.isChecked():
-					self.temp.setText('%.2f' % float(self.sim900.query(self.settings['DEVICES']['tsourcemod'],'TVAL? '+str(self.settings['DEVICES']['tinput'])+',1')))
-				if not self.manualbias.isChecked():
-					self.bias.setText(str(float(self.sim900.query(self.settings['DEVICES']['vsourcemod'],'VOLT?'))*int(self.sim900.query(self.settings['DEVICES']['vsourcemod'],'EXON?'))))
-				self.sim900.close()
+				try:
+					if not self.manualtemp.isChecked():
+						self.temp.setText('%.2f' % float(self.sim900.query(self.settings['DEVICES']['tsourcemod'],'TVAL? '+str(self.settings['DEVICES']['tinput'])+',1')))
+					if not self.manualbias.isChecked():
+						self.bias.setText(str(float(self.sim900.query(self.settings['DEVICES']['vsourcemod'],'VOLT?'))*int(self.sim900.query(self.settings['DEVICES']['vsourcemod'],'EXON?'))))
+					self.sim900.close()
+				except:
+                                        self.statusBar().showMessage('Error communicating to SIM900')
+                                        return
 
 		if not self.manualatten.isChecked():
 			self.set_wavelength = None
@@ -1098,7 +1103,6 @@ class MapperTool(QtGui.QMainWindow):
 	def checkForGraph(self):
 		try:
 			self.canvas
-			print 'is this ever triggered?'
 		except AttributeError:
 			self.data = np.array([[]])
 			self.fig = plt.figure('scanview',figsize = (5,4), dpi=72, facecolor=(1,1,1), edgecolor=(0,0,0))
@@ -1534,12 +1538,12 @@ class MoveDrone(QtCore.QObject):
 
 	def runMove(self):
 		self.init() #readies mover/measurer
-		print self.mover.getPos()
+		#print self.mover.getPos()
 		if self.mMeas_par['xt']!=None:
 			self.mover.moveTo('x',self.mMeas_par['xt'])
 		if self.mMeas_par['yt']!=None:
 			self.mover.moveTo('y',self.mMeas_par['yt'])
-		print self.mover.getPos()
+		#print self.mover.getPos()
 		self.mover.close()
 		self.movefinished.emit()
 
