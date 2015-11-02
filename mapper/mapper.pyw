@@ -6,6 +6,7 @@ import matplotlib
 matplotlib.use('Qt4Agg')
 import matplotlib.pyplot as plt
 import matplotlib.tri as tri
+from matplotlib.colors import ListedColormap
 import numpy as np
 #import math
 from PySide import QtGui, QtCore, QtWebKit
@@ -14,6 +15,8 @@ import json
 import time
 import csv
 import os
+
+from pyvisa.errors import InvalidSession
 
 import colormaps
 import movement
@@ -52,6 +55,7 @@ def defaultSettings():
 					'title':True,
 					'convert_to_sde':True,
 					'verbose':False,
+					'flip_colorbar':False,
 					'manual_axes':False,
 					'xmax':None,
 					'xmin':None,
@@ -114,8 +118,16 @@ def convert_to_builtin_type(obj):
 	#from https://pymotw.com/2/json/
 	#print 'default(', repr(obj), ')'
 	# Convert objects to a dictionary of their representation
-	d = { '__class__':obj.__class__.__name__, '__module__':obj.__module__}
-	d.update(obj.__dict__)
+	d = {}
+	try:
+		d['__class__'] = obj.__class__.__name__
+	except InvalidSession:
+		d['__class__'] = ''
+
+	try:
+		d['__module__'] = obj.__module__
+	except InvalidSession:
+		d['__module__'] = ''
 	return d
 
 class MapperProg(QtGui.QMainWindow):
@@ -215,6 +227,10 @@ class MapperProg(QtGui.QMainWindow):
 		toolAction.setStatusTip('Launch Mapper Tool (Ctrl-T)')
 		toolAction.triggered.connect(self.mapperTool)
 
+		flipAction = QtGui.QAction(QtGui.QIcon(r'icons\flip.png'),'&Flip colorbar',self)
+		flipAction.setStatusTip('Flip colorbar')
+		flipAction.triggered.connect(self.flipColorbar)
+
 		menubar = self.menuBar()
 		fileMenu = menubar.addMenu('&File')
 		fileMenu.addAction(newAction)
@@ -245,6 +261,7 @@ class MapperProg(QtGui.QMainWindow):
 		self.toolbar.addAction(exportAction)
 		self.toolbar.addSeparator()
 		self.toolbar.addAction(toolAction)
+		self.toolbar.addAction(flipAction)
 
 	def createLayoutsAndWidgets(self):
 		self.metadata_grid = QtGui.QGridLayout()
@@ -740,6 +757,13 @@ class MapperProg(QtGui.QMainWindow):
 			self.cbar = plt.colorbar()
 		self.fig.tight_layout()
 		self.canvas.draw()
+
+	def flipColorbar(self):
+		try:
+			self.img.set_cmap(ListedColormap(self.img.cmap.colors[::-1]))
+			self.canvas.draw()
+		except AttributeError:
+			return
 
 	def checkForGraph(self):
 		try:
@@ -1845,6 +1869,11 @@ class SettingsDialog(QtGui.QDialog):
 						'w':QtGui.QCheckBox(),
 						'v':'verbose'
 						},
+					'b3':{
+						't':'Flip colorbar:',
+						'w':QtGui.QCheckBox(),
+						'v':'flip_colorbar'
+						},
 					'c':{
 						't':'Manually-defined axis limits:',
 						'w':QtGui.QCheckBox(),
@@ -1995,6 +2024,7 @@ class MapperPlot(QtGui.QMainWindow):
 		self.settings = settings
 		self.se = settings['EXPORT']
 		self.filename = filename
+		self.colorbar = colormaps.viridis
 		try:
 			self.meas_par = self.pm['meas_par']
 		except KeyError:
@@ -2022,6 +2052,7 @@ class MapperPlot(QtGui.QMainWindow):
 		self.give_title = QtGui.QCheckBox('Graph title')
 		self.title = QtGui.QLineEdit(self.autoTitle())
 		self.verbose_graph = QtGui.QCheckBox('Verbose graph')
+		self.flip_colorbar = QtGui.QCheckBox('Flip colorbar')
 		self.plot_type = QtGui.QComboBox(self)
 		self.manual_limits = QtGui.QCheckBox('Manual axes')
 		self.x_max = QtGui.QLineEdit('')
@@ -2043,6 +2074,7 @@ class MapperPlot(QtGui.QMainWindow):
 
 		self.checkables = [ ['title',self.give_title],
 							['verbose',self.verbose_graph],
+							['flip_colorbar',self.flip_colorbar],
 							['manual_axes',self.manual_limits],
 							['show_datapoints',self.show_datapoints],
 							['convert_to_sde',self.convert_to_sde]]
@@ -2111,7 +2143,8 @@ class MapperPlot(QtGui.QMainWindow):
 		self.bottombar.addWidget(self.closeButton)
 
 		self.gridsection2.addWidget(self.verbose_graph,0,0)
-		self.gridsection2.addWidget(self.manual_limits,1,0)
+		self.gridsection2.addWidget(self.flip_colorbar,1,0)
+		self.gridsection2.addWidget(self.manual_limits,2,0)
 
 		self.gridsection3.addWidget(QtGui.QLabel('Plot type:'),0,0)
 		self.gridsection3.addWidget(self.plot_type,0,1)
@@ -2159,6 +2192,7 @@ class MapperPlot(QtGui.QMainWindow):
 
 	def connectWidgets(self):
 		self.verbose_graph.stateChanged.connect(self.checkVerbosity)
+		self.flip_colorbar.stateChanged.connect(self.updatePreview)
 
 		self.manual_limits.toggled.connect(self.manual_limits_widget.setVisible)
 		self.manual_limits.toggled.connect(self.replot)
@@ -2236,6 +2270,10 @@ class MapperPlot(QtGui.QMainWindow):
 						self.data_array[4][i] = 0.0
 				self.data_array[4] *= self.scaling_factor
 			#print 'current plot type:',self.plot_type.currentText()
+			if self.flip_colorbar.isChecked():
+				self.colorbar = ListedColormap(colormaps.viridis.colors[::-1])
+			else:
+				self.colorbar = colormaps.viridis
 			if self.plot_type.currentText() == 'Grid':
 				self.fig.clear()
 				self.ax = self.fig.add_subplot(1,1,1)
@@ -2263,7 +2301,7 @@ class MapperPlot(QtGui.QMainWindow):
 				if self.pm['y_forward']:
 					self.z_data = self.z_data[::-1]
 
-				self.img = plt.imshow(self.z_data,extent=self.extent, interpolation='nearest',cmap=colormaps.viridis, aspect='auto')
+				self.img = plt.imshow(self.z_data,extent=self.extent, interpolation='nearest',cmap=self.colorbar, aspect='auto')
 				self.cbar = plt.colorbar()
 
 
@@ -2275,7 +2313,7 @@ class MapperPlot(QtGui.QMainWindow):
 				elif self.plot_type.currentText() == 'Filled contour':
 					self.plotwith = plt.tricontourf
 				try:
-					self.contourf = self.plotwith(self.data_array[0],self.data_array[1],self.data_array[4],cmap=colormaps.viridis)
+					self.contourf = self.plotwith(self.data_array[0],self.data_array[1],self.data_array[4],cmap=self.colorbar)
 				except RuntimeError:
 					pass
 				except ValueError:
@@ -2290,7 +2328,7 @@ class MapperPlot(QtGui.QMainWindow):
 				if self.show_datapoints.isChecked():
 					self.colordata = []
 					for value in [((x-min(self.data_array[4]))/(max(self.data_array[4]-min(self.data_array[4])))) for x in self.data_array[4]]:
-						self.colordata.append(colormaps.viridis(value))
+						self.colordata.append(self.colorbar(value))
 					#print 'finished doing colordata at:',time.time()-self.start_time
 					for v, value in enumerate(self.data_array[0]):
 						self.plot = plt.plot([self.data_array[0][v]], [self.data_array[1][v]],'o',color=self.colordata[v],ms=10)
