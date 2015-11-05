@@ -242,6 +242,15 @@ class MapperProg(QtGui.QMainWindow):
 		fileMenu.addAction(saveAsAction)
 		fileMenu.addSeparator()
 		fileMenu.addAction(exitAction)
+		toolMenu=menubar.addMenu('&Tools')
+		toolMenu.addAction(self.acquireAction)
+		toolMenu.addAction(self.haltAction)
+		toolMenu.addSeparator()
+		toolMenu.addAction(plotAction)
+		toolMenu.addAction(exportAction)
+		toolMenu.addSeparator()
+		toolMenu.addAction(toolAction)
+		toolMenu.addAction(flipAction)
 		settingsMenu = menubar.addMenu('&Settings')
 		settingsMenu.addAction(settingsAction)
 		helpMenu = menubar.addMenu('&Help')
@@ -696,6 +705,7 @@ class MapperProg(QtGui.QMainWindow):
 		self.mapper_drone.finished.connect(self.acquisitionFinished)
 		self.mapper_drone.xSteps.connect(self.getXSteps)
 		self.mapper_drone.ySteps.connect(self.getYSteps)
+		self.mapper_drone.writeRescueTrigger.connect(self.writeRescueData)
 		self.x_steps = None
 		self.y_steps = None
 		self.setNeedsSaving()
@@ -814,7 +824,7 @@ class MapperProg(QtGui.QMainWindow):
 			self.statusBar().showMessage('Begun next dataset')
 
 	def open(self):
-		self.filename_open, _ = QtGui.QFileDialog.getOpenFileName(self,'Open file...',self.settings['targetfolder'],"I-V data (*.txt);;All data (*.*)")
+		self.filename_open, _ = QtGui.QFileDialog.getOpenFileName(self,'Open file...',self.settings['targetfolder'],"Mapper data (*.json);;All data (*.*)")
 		if self.checkNeedsSaving() == False:
 			if self.filename_open != '':
 				#self.new(True)
@@ -871,12 +881,15 @@ class MapperProg(QtGui.QMainWindow):
 			self.updateWindowTitle()
 			self.setNeedsSaving(reset=True)
 
-
 	def saveAs(self):
-		self.filename, _ = QtGui.QFileDialog.getSaveFileName(self,'Save as...',self.settings['targetfolder'],"Mapper data (*.txt);;All data (*.*)")
+		self.filename, _ = QtGui.QFileDialog.getSaveFileName(self,'Save as...',self.settings['targetfolder'],"Mapper data (*.json);;All data (*.*)")
 		if self.filename != '':
 			self.folder_for_dialogs = self.filename
 			self.save()
+
+	def writeRescueData(self):
+		with open('rescued.json','w') as f:
+			f.write(json.dumps({'metadata':self.processMetadata(),'data':self.data},default=convert_to_builtin_type))
 
 	def updateWindowTitle(self):
 		if self.filename == '':
@@ -1353,6 +1366,7 @@ class MapperDrone(QtCore.QObject):
 	aborted = QtCore.Signal()
 	xSteps = QtCore.Signal(int)
 	ySteps = QtCore.Signal(int)
+	writeRescueTrigger = QtCore.Signal()
 
 	def runScan(self):
 		self.init() #readies mover/measurer
@@ -1385,6 +1399,7 @@ class MapperDrone(QtCore.QObject):
 				if self.abort == True:
 					self.aborted.emit()
 					return
+			self.writeRescueTrigger.emit()
 			if self.abort == True:
 				self.aborted.emit()
 				return	
@@ -1412,6 +1427,7 @@ class MapperDrone(QtCore.QObject):
 					self.aborted.emit()
 					return
 
+			self.writeRescueTrigger.emit()
 			self.step['x']=0
 			if (self.y_steps == float('inf') and self.ygoesup and self.pos['y'] > self.meas_par['yt']) or (
 			   self.y_steps == float('inf') and not self.ygoesup and self.pos['y'] < self.meas_par['yt']):
