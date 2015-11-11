@@ -838,8 +838,15 @@ class MapperProg(QtGui.QMainWindow):
 						reply = QtGui.QMessageBox.question(self,'Mapper', 'Problem loading '+str(self.filename)+':\n'+str(e),
 								QtGui.QMessageBox.Ok)
 						return
-				self.processMetadata(self.loaded_data['metadata'])
-				self.setNewDataset(self.loaded_data['data'])
+				try:
+					self.processMetadata(self.loaded_data['metadata'])
+					self.setNewDataset(self.loaded_data['data'])
+				except KeyError as e:
+					self.statusBar().showMessage('Problem loading file '+str(self.filename))
+					reply = QtGui.QMessageBox.question(self,'Mapper', 'Problem loading '+str(self.filename)+':\n'+str(e),
+							QtGui.QMessageBox.Ok)
+					return
+
 
 				try:
 					if 'mtype' in self.meas_par.keys():
@@ -1601,7 +1608,6 @@ class MoveDrone(QtCore.QObject):
 									self.mMeas_par['f'],
 									self.mMeas_par['c'],
 									self.mMeas_par['vr'])
-
 
 class SettingsDialog(QtGui.QDialog):
 	def __init__(self,settings,movers,measurers):
